@@ -1,0 +1,34 @@
+name: Build desktop apps
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            command: build:mac
+            artifact: macOS-arm64
+          - os: windows-latest
+            command: build:win
+            artifact: Windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run ${{ matrix.command }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cmd-send-${{ matrix.artifact }}
+          path: artifacts/*.zip
+          if-no-files-found: error

@@ -1,0 +1,24 @@
+# 本地验证记录 · 2026-10-09
+
+用户已于 2026-10-09 授权推送并发布 v0.1.0。以下为发布前的本地验证记录，未验证项保持原结论。验证环境为 Apple Silicon，macOS 26.6.2。
+
+- 15 项命令范围、标题、注释与选区解析检查，5 项文件测试、8 项发送队列测试、Mac 原生接口加载测试均通过。
+- 队列检查覆盖 A B C A B C、首条不额外等待、跨轮间隔、中文与 emoji、暂停续传、循环停止、含歧义失败不重试、停止过程不再完成旧任务，以及退出等待原生调用清理。
+- 文件检查覆盖 BOM/CRLF、重复路径和软链接复用、不同目录同名文件、磁盘外部修改保护、失败保留原文件、并发保存。
+- 真实 `.app` 已启动，通过界面打开磁盘 TXT，生成场景目录并定位命令；查找 echo 显示 3 处匹配；真实置顶开关有反馈。截图位于本地 `screenshots/mac-desktop.png`。
+- Mac 包完成 ad-hoc 签名并通过严格签名校验，未使用 Developer ID、未公证。
+- Windows x64 交叉构建成功。EXE 与 Koffi 模块均为 PE32+ x86-64；具体控件识别脚本随包携带。
+- Windows 原生加载和 UI Automation 运行测试在 Mac 明确跳过；仓库工作流会在 Windows 运行，尚未执行远程工作流。
+- Mac 外部输入需要本人授予辅助功能权限，再进行真实目标验证。构建成功和逻辑检查不代表外部输入兼容性已通过。
+
+| 目标 | 验证状态 |
+| --- | --- |
+| macOS TextEdit / Terminal | 未验证真实投递，需辅助功能授权 |
+| macOS iTerm2 / 其他自绘输入区 | 未验证；无法识别输入控件时拒绝绑定 |
+| Windows Edit / RichEdit | 已实现后台投递，未在 Windows 实机验证 |
+| Windows Terminal / CMD / PuTTY | 已实现具体控件识别和焦点校验，未验证 |
+| MobaXterm / SecureCRT / 串口助手 | 未验证，不承诺自绘及管理员窗口兼容 |
+
+建议先绑定空白文本框，验证单条、A/B/C 两轮、持续循环、暂停/继续/停止；再测试关闭目标及切换输入区不会错发，以及编辑保存、取消退出、保存退出。
+
+实现参考：[Microsoft FromPoint](https://learn.microsoft.com/en-us/dotnet/api/system.windows.automation.automationelement.frompoint)、[SetFocus](https://learn.microsoft.com/en-us/dotnet/api/system.windows.automation.automationelement.setfocus)、[GetGUIThreadInfo](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getguithreadinfo)。

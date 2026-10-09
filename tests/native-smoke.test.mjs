@@ -1,0 +1,4 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+test('native backend loads the actual host platform APIs without injecting input',()=>{const backend=require('../electron/native/index.cjs').createBackend();try{assert.equal(typeof backend.permission(),'boolean');assert.equal(typeof backend.mouseDown(),'boolean');assert.equal(backend.hasTarget('unknown'),false);}finally{backend.dispose();}});
+test('Windows UI Automation worker loads and rejects an unregistered input area',{skip:process.platform!=='win32'},async()=>{const {AutomationWorker}=require('../electron/native/windows-uia.cjs');const worker=new AutomationWorker();try{await assert.rejects(worker.call('verify',{targetId:'unknown'}),/已失效/);}finally{worker.dispose();}});
