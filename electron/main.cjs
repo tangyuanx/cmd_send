@@ -11,6 +11,7 @@ const files=new FileStore();
 const page=pathToFileURL(path.join(__dirname,'../src/index.html')).href;
 function cancelPick(){if(!picker)return;clearInterval(picker.timer);picker.resolve({cancelled:true});picker=null;}
 function emit(channel,data){if(win&&!win.isDestroyed())win.webContents.send(channel,data);}
+function windowState(){return {maximized:win.isMaximized(),fullscreen:win.isFullScreen()};}
 function handle(name,fn){ipcMain.handle(name,async(event,...args)=>{
   if(event.sender!==win?.webContents||event.senderFrame?.url!==page)throw new Error('无法识别请求来源');
   try{return {ok:true,value:await fn(...args)};}catch(error){return {ok:false,error:String(error.message||error)};}
@@ -21,8 +22,7 @@ async function requestClose(){
 }
 app.whenReady().then(()=>{
   backend=createBackend();queue=new SendQueue(backend);queue.on('state',state=>emit('desktop:queue',state));
-  win=new BrowserWindow({width:1040,height:760,minWidth:680,minHeight:440,title:'命令定向',backgroundColor:'#f7f7f8',show:false,
-    ...(process.platform==='darwin'?{titleBarStyle:'hiddenInset',trafficLightPosition:{x:16,y:17}}:{}),
+  win=new BrowserWindow({width:1040,height:760,minWidth:680,minHeight:440,title:'命令定向',backgroundColor:'#f7f7f8',show:false,frame:false,
     webPreferences:{preload:path.join(__dirname,'preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true}});
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   win.webContents.on('will-navigate',(event,url)=>{if(url!==page)event.preventDefault();});
@@ -32,7 +32,15 @@ app.whenReady().then(()=>{
   win.once('ready-to-show',()=>win.show());
   win.on('close',event=>{if(!approvedClose){event.preventDefault();void requestClose();}});
   win.on('closed',()=>{cancelPick();backend.dispose();win=null;app.quit();});
-  handle('desktop:config',()=>({platform:process.platform,version:app.getVersion(),accessibility:backend.permission()}));
+  for(const event of ['maximize','unmaximize','enter-full-screen','leave-full-screen'])win.on(event,()=>emit('desktop:window-state',windowState()));
+  handle('desktop:config',()=>({platform:process.platform,version:app.getVersion(),accessibility:backend.permission(),window:windowState()}));
+  handle('desktop:window-minimize',()=>win.minimize());
+  handle('desktop:window-maximize',()=>{
+    if(win.isFullScreen())win.setFullScreen(false);
+    else if(win.isMaximized())win.unmaximize();
+    else win.maximize();
+  });
+  handle('desktop:window-close',requestClose);
   handle('desktop:open',async()=>{
     unlocked();const selection=await dialog.showOpenDialog(win,{title:'打开 TXT 文件',properties:['openFile','multiSelections'],filters:[{name:'UTF-8 文本',extensions:['txt']} ]});
     const results=[];for(const file of selection.filePaths){try{results.push(await files.open(file));}catch(error){await dialog.showMessageBox(win,{type:'error',message:`无法打开 ${path.basename(file)}`,detail:error.message});}}
@@ -78,6 +86,7 @@ app.whenReady().then(()=>{
     {label:'文件',submenu:[{label:'打开…',accelerator:'CmdOrCtrl+O',click:()=>emit('desktop:open-request')},{label:'保存',accelerator:'CmdOrCtrl+S',click:()=>emit('desktop:save-request')},{type:'separator'},{label:'关闭窗口',accelerator:'CmdOrCtrl+W',click:()=>void requestClose()}]},edit,
     {label:'窗口',submenu:[{role:'minimize',label:'最小化'},{role:'zoom',label:'缩放'}]}
   ]));
+  if(process.platform!=='darwin')win.removeMenu();
   void win.loadURL(page);
 }).catch(error=>{dialog.showErrorBox('无法启动命令定向',error.stack||error.message);app.exit(1);});
 app.on('before-quit',event=>{if(win&&!approvedClose){event.preventDefault();void requestClose();}});
