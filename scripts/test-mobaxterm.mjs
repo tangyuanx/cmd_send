@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';import fs from 'node:fs/promises';
 import path from 'node:path';import os from 'node:os';import {createHash} from 'node:crypto';
 import {spawn,execFileSync} from 'node:child_process';import {setTimeout as delay} from 'node:timers/promises';
+import {createInterface} from 'node:readline';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),koffi=require('koffi');
 if(process.platform!=='win32')throw new Error('MobaXterm integration test requires Windows');
@@ -30,7 +31,7 @@ function handle(value){return BigInt(value);}
 async function screen(name){const file=path.join(evidence,name).replaceAll("'","''");execFileSync('powershell.exe',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $r=[Windows.Forms.SystemInformation]::VirtualScreen; $b=New-Object Drawing.Bitmap($r.Width,$r.Height); $g=[Drawing.Graphics]::FromImage($b); $g.CopyFromScreen($r.Left,$r.Top,0,0,$b.Size); $b.Save('${file}'); $g.Dispose(); $b.Dispose()`]);}
 async function read(){try{return await fs.readFile(output,'utf8');}catch{return '';}}
 function message(h,msg,wp,lp=1){const result=[0];assert.ok(post(h,msg,wp,lp,0x22,1000,result),`Message ${msg} failed`);}
-let child,backend;
+let child,otherChild,backend;
 try{
   const response=await fetch('https://download.mobatek.net/2652026082870834/MobaXterm_Portable_v26.5.zip');assert.ok(response.ok);
   const bytes=Buffer.from(await response.arrayBuffer());assert.equal(createHash('sha256').update(bytes).digest('hex'),'a26e7e4e2f7bd47a13fbc6d93d08a2d946f21c3e0d135b9e4f55149842c09ef6');
@@ -61,16 +62,27 @@ try{
     message(terminalHandle,0x100,13,1|(0x1c<<16));message(terminalHandle,0x101,13,(1|(0x1c<<16))>>>0|0xc0000000);await delay(800);report.keyEnter=await read();console.log('WM_KEYDOWN:',JSON.stringify(report.keyEnter));
   }else{
     assert.equal(target.name,'MobaXterm');assert.equal(target.strategy,'后台终端输入');
+    // Cover the terminal with another application's focused Edit control.
+    const fixture=await fs.readFile(new URL('../tests/fixtures/windows-input.ps1',import.meta.url),'utf8');
+    const wrongOutput=path.join(evidence,'wrong-window.txt');
+    otherChild=spawn('powershell.exe',['-NoProfile','-STA','-EncodedCommand',Buffer.from(fixture,'utf16le').toString('base64')],{stdio:['ignore','pipe','pipe'],env:{...process.env,CMD_SEND_FIXTURE_OUTPUT:path.join(evidence,'other.txt'),CMD_SEND_FIXTURE_EDIT:wrongOutput}});
+    const other=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Foreground fixture did not start')),15000);const lines=createInterface({input:otherChild.stdout});lines.on('line',line=>{try{const value=JSON.parse(line);if(value.ready){clearTimeout(timer);resolve(value);}}catch{}});otherChild.once('error',e=>{clearTimeout(timer);reject(e);});});
+    activate(BigInt(other.window));await delay(200);assert.equal(pointer(foreground()),String(other.window));
     const before=pointer(foreground()),context=await backend.prepare(target.id);
     for(const character of 'CMD_SEND_中😀')await backend.character(target.id,character);await backend.enter(target.id);backend.finish(target.id,context);
     for(let i=0;i<80;i++){if((await read()).includes('CMD_SEND_中😀'))break;await delay(50);}
     assert.equal((await read()).replaceAll('\r',''),'CMD_SEND_中😀\n');assert.equal(pointer(foreground()),before);
-    console.log('PASS: actual MobaXterm 26.5 embedded MoTTY receives ASCII/Chinese/emoji/Enter without focusing or clicking it');
+    assert.equal(await fs.readFile(wrongOutput,'utf8').catch(()=>''),'');
+    console.log('PASS: actual MobaXterm 26.5 embedded MoTTY receives ASCII/Chinese/emoji/Enter while another app keeps focus and receives no text');
+    execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore'});await delay(150);
+    await assert.rejects(backend.character(target.id,'X'),/关闭|替换|失效/);
+    console.log('PASS: closing the actual MobaXterm rejects subsequent delivery, with no retargeting');
   }
   await screen('terminal.png');console.log('RECEIVED:',JSON.stringify(await read()));
 }catch(error){report.error=error.stack;await screen('failure.png').catch(()=>{});throw error;}
 finally{
   await fs.writeFile(path.join(evidence,'report.json'),JSON.stringify(report,null,2));backend?.dispose();
   if(child?.pid)try{execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore'});}catch{}
+  if(otherChild?.pid)try{execFileSync('taskkill',['/PID',String(otherChild.pid),'/T','/F'],{stdio:'ignore'});}catch{}
   await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});
 }

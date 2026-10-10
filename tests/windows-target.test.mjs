@@ -4,12 +4,12 @@ import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {createBackend}=require('../electron/native/windows.cjs');
 
-function setup({className='CustomTerminal',automation=null,pickError=null}={}){
-  const state={foreground:99,cursor:{x:140,y:260},focus:10,alive:true,enabled:true,readonly:false,covered:false,clicks:0,keys:[],shortInput:false,calls:[],verify:null,activate:true,failClick:false};
+function setup({className='CustomTerminal',automation=null,pickError=null,processName='Fixture',hostName=processName,hostPid=123}={}){
+  const state={foreground:99,cursor:{x:140,y:260},focus:10,alive:true,enabled:true,readonly:false,covered:false,clicks:0,keys:[],shortInput:false,calls:[],verify:null,activate:true,failClick:false,messages:[],postSuccess:true,visible:true,parent:1,hostPid,hostReplaced:false};
   const functions={
     GetCursorPos:p=>{Object.assign(p,state.cursor);return 1;},SetCursorPos:(x,y)=>{state.cursor={x,y};return 1;},
-    WindowFromPoint:()=>state.covered?88:10,GetAncestor:()=>1,GetWindowThreadProcessId:(hwnd,pid)=>{pid[0]=hwnd===99?999:123;return 7;},
-    IsWindow:h=>h&&state.alive?1:0,IsWindowEnabled:()=>+state.enabled,
+    WindowFromPoint:()=>state.covered?88:10,GetAncestor:()=>state.parent,GetWindowThreadProcessId:(hwnd,pid)=>{pid[0]=hwnd===99?999:hwnd===1?state.hostPid:123;return hwnd===1&&hostPid!==123?8:7;},
+    IsWindow:h=>h&&state.alive?1:0,IsWindowEnabled:()=>+state.enabled,IsWindowVisible:()=>+state.visible,
     GetClassNameW:(h,b)=>{const text=h===10?className:'CustomTerminal';b.write(text,'utf16le');return text.length;},
     GetWindowTextW:(_h,b)=>{b.write('Fixture','utf16le');return 7;},GetWindowLongPtrW:()=>state.readonly?0x800:0,
     GetGUIThreadInfo:(_thread,info)=>{info.focus=state.focus;return 1;},
@@ -17,7 +17,7 @@ function setup({className='CustomTerminal',automation=null,pickError=null}={}){
     SetFocus:()=>10,AttachThreadInput:()=>1,IsChild:(parent,child)=>+(parent===1&&child===10),ShowWindow:()=>1,IsIconic:()=>0,
     ScreenToClient:(_h,p)=>{p.x-=100;p.y-=200;return 1;},ClientToScreen:(_h,p)=>{p.x+=100;p.y+=200;return 1;},
     GetClientRect:(_h,r)=>{Object.assign(r,{left:0,top:0,right:400,bottom:300});return 1;},GetAsyncKeyState:()=>0,GetSystemMetrics:index=>({76:0,77:0,78:1920,79:1080})[index],
-    SendMessageTimeoutW:()=>1,
+    SendMessageTimeoutW:(h,msg,wp)=>{state.messages.push({h,msg,wp});return +state.postSuccess;},
     SendInput:(n,b)=>{
       if(b.readUInt32LE(0)===0){
         assert.equal(n,3);assert.equal(b.length,120);
@@ -27,8 +27,8 @@ function setup({className='CustomTerminal',automation=null,pickError=null}={}){
       else{state.keys.push(b.readUInt16LE(10)||b.readUInt16LE(8));if(state.shortInput)return 1;}
       return n;
     },
-    OpenProcess:()=>5,GetProcessTimes:(_h,created)=>{created[0]=42n;return 1;},
-    QueryFullProcessImageNameW:(_h,_flags,b,size)=>{const value='C:\\Fixture.exe';b.write(value,'utf16le');size[0]=value.length;return 1;},
+    OpenProcess:(_a,_i,pid)=>pid,GetProcessTimes:(h,created)=>{created[0]=h===hostPid&&state.hostReplaced?43n:42n;return 1;},
+    QueryFullProcessImageNameW:(h,_flags,b,size)=>{const value=`C:\\${h===hostPid?hostName:processName}.exe`;b.write(value,'utf16le');size[0]=value.length;return 1;},
     CloseHandle:()=>1,GetCurrentThreadId:()=>6,GetLastError:()=>5,
   };
   const koffi={struct:()=>({}),sizeof:()=>72,address:p=>p,load:()=>({func:signature=>{
@@ -86,4 +86,28 @@ test('stop while UIA verification is pending cancels delivery without a late cha
 test('a partial SendInput result rejects the awaited character instead of reporting success',async()=>{
   const {backend,state}=setup();const t=await backend.pick();await backend.prepare(t.id);state.shortInput=true;
   await assert.rejects(backend.character(t.id,'A'),/投递未完成/);assert.equal(state.keys.length,1);
+});
+test('MobaXterm embedded CMoTTY sends to the exact terminal in the background despite unrelated host focus',async()=>{
+  const {backend,state}=setup({className:'CMoTTY',processName:'MoTTY',hostName:'MobaXterm_Personal_26.5',hostPid:456});
+  state.focus=88;state.activate=false;state.readonly=true;const target=await backend.pick();
+  assert.equal(target.name,'MobaXterm');assert.equal(target.strategy,'后台终端输入');assert.deepEqual(state.calls,[]);
+  const context=await backend.prepare(target.id);for(const c of 'A中😀')await backend.character(target.id,c);await backend.enter(target.id);backend.finish(target.id,context);
+  assert.deepEqual(state.messages.map(m=>[m.h,m.msg,m.wp]),[[10,0x102,65],[10,0x102,0x4e2d],[10,0x102,0xd83d],[10,0x102,0xde00],[10,0x102,13]]);
+  assert.equal(state.foreground,99);assert.equal(state.clicks,0);assert.deepEqual(state.keys,[]);
+});
+test('CMoTTY class alone cannot opt an unrelated process into terminal background delivery',async()=>{
+  const {backend}=setup({className:'CMoTTY',processName:'Unrelated'});assert.equal((await backend.pick()).strategy,'所选区域聚焦输入');
+});
+test('background terminal refuses hidden tabs, host replacement and reparenting before any text',async()=>{
+  for(const mutation of [s=>s.visible=false,s=>s.hostReplaced=true,s=>s.hostPid=457,s=>s.parent=2]){
+    const {backend,state}=setup({className:'CMoTTY',processName:'MoTTY',hostName:'MobaXterm',hostPid:456});const target=await backend.pick();mutation(state);
+    await assert.rejects(backend.character(target.id,'X'),/隐藏|关闭|替换/);assert.equal(state.messages.length,0);
+  }
+});
+test('cross-process terminals embedded in the tool itself are excluded by their host PID',async()=>{
+  const {backend}=setup({className:'CMoTTY',processName:'MoTTY',hostPid:456});backend.setExcludedPids([456]);await assert.rejects(backend.pick(),/自身/);
+});
+test('background terminal permission failures propagate without foreground fallback or retry',async()=>{
+  const {backend,state}=setup({className:'CMoTTY',processName:'MoTTY'});const target=await backend.pick();state.postSuccess=false;
+  await assert.rejects(backend.character(target.id,'X'),/权限.*停止.*不会重试/);assert.equal(state.messages.length,1);assert.equal(state.clicks,0);assert.deepEqual(state.keys,[]);
 });
