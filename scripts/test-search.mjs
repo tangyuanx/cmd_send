@@ -20,15 +20,21 @@ async function currentVisible(index,count){
  const state=await page.evaluate(()=>{
   const editor=document.getElementById('editor'),mark=document.querySelector('.find-current'),range=document.createRange();range.selectNodeContents(mark);
   const r=range.getBoundingClientRect(),box=document.getElementById('findBar').getBoundingClientRect();
-  return {selected:editor.value.slice(editor.selectionStart,editor.selectionEnd),painted:mark.textContent,internalTop:editor.scrollTop,internalLeft:editor.scrollLeft,clearOfBar:r.top>=box.bottom,outline:getComputedStyle(mark).outlineWidth,lineHidden:document.getElementById('findLine').hidden};
+  return {selected:editor.value.slice(editor.selectionStart,editor.selectionEnd),start:editor.selectionStart,end:editor.selectionEnd,length:editor.value.length,painted:mark.textContent,internalTop:editor.scrollTop,internalLeft:editor.scrollLeft,clearOfBar:r.top>=box.bottom,outline:getComputedStyle(mark).outlineWidth,lineHidden:document.getElementById('findLine').hidden};
  });
- assert.equal(state.selected,state.painted);assert.equal(state.internalTop,0);assert.equal(state.internalLeft,0);
+ assert.equal(state.selected,state.painted,JSON.stringify(state));assert.equal(state.internalTop,0);assert.equal(state.internalLeft,0);
  assert.equal(state.clearOfBar,true);assert.equal(state.outline,'2px');assert.equal(state.lineHidden,false);
 }
 try{
  application=await electron.launch({args:[path.join(root,'tests','fixtures','search-main.cjs')],env,timeout:60000});
  page=await application.firstWindow();page.on('pageerror',e=>errors.push(e.message));
  await page.waitForFunction(()=>document.getElementById('editor').value.includes('routine 119'));
+ await page.evaluate(()=>{
+  window.searchEvents=[];
+  for(const type of ['input','select','focusin','click'])document.addEventListener(type,event=>{
+   const editor=document.getElementById('editor');window.searchEvents.push({type,target:event.target.id,active:document.activeElement.id,start:editor.selectionStart,end:editor.selectionEnd,length:editor.value.length,count:document.getElementById('findCount').textContent});if(window.searchEvents.length>40)window.searchEvents.shift();
+  });
+ });
  await page.keyboard.press('Control+f');await page.locator('#findInput').fill('FINDME');await currentVisible(0,4);
  assert.equal(await page.locator('.find-match').count(),4);assert.equal(await page.locator('#findInput').evaluate(el=>el===document.activeElement),true);
  await page.screenshot({path:path.join(evidence,'light-first.png')});passed('all results stay painted with search input focused; first result is clear of the find bar');
@@ -71,5 +77,8 @@ try{
  const plans=await application.evaluate(()=>global.searchCaptures.plans);assert.equal(plans.length,1);assert.deepEqual(plans[0].commands,['echo 中😀 FINDME']);
  assert.equal(await page.locator('.find-match').count(),0);assert.equal(await page.locator('#editor').inputValue(),edited);passed('search rendering cannot change the actual command sent or TXT buffer');
  assert.deepEqual(errors,[]);
-}catch(error){if(page&&!page.isClosed())await page.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});throw error;}
+}catch(error){if(page&&!page.isClosed()){
+ await fs.writeFile(path.join(evidence,'failure-state.json'),JSON.stringify(await page.evaluate(()=>({events:window.searchEvents,text:document.getElementById('editor').value,painted:document.getElementById('syntaxText').textContent})),null,2)).catch(()=>{});
+ await page.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});
+ }throw error;}
 finally{await application?.close().catch(()=>{});await fs.writeFile(path.join(evidence,'checks.json'),JSON.stringify({version,platform:process.platform,checks,errors},null,2));await fs.rm(temp,{recursive:true,force:true});}

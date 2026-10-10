@@ -45,7 +45,7 @@ body{padding:0;display:block;overflow:hidden;background:var(--surface)}
 .find-bar{position:relative;top:auto;right:auto;align-self:flex-end;flex:0 0 auto;margin:14px 20px 8px;box-shadow:none}
 .find-bar input[aria-invalid=true]{color:var(--secondary)}
 .find-count{font-variant-numeric:tabular-nums;min-width:36px;text-align:center}
-.find-match{background:var(--find-match);color:inherit;padding:0;border-radius:2px;box-decoration-break:clone}
+.find-match{background:var(--find-match);color:var(--text);padding:0;border-radius:2px;box-decoration-break:clone}
 .find-current{background:var(--find-current);outline:2px solid var(--find-outline)}
 .find-line{position:absolute;left:0;right:0;height:var(--lh);background:var(--find-line);box-shadow:inset 3px 0 var(--find-outline);pointer-events:none;z-index:0}
 .has-find-matches .current-line{display:none}
