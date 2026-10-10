@@ -7,6 +7,29 @@ on:
 permissions:
   contents: read
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: version
+        name: Detect a new release version
+        run: |
+          APP_VERSION=$(node -p "require('./package.json').version")
+          echo "tag=v$APP_VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            test "$GITHUB_REF_NAME" = "v$APP_VERSION"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            # Also allow a repaired build of an unreleased version to finish publishing.
+            if [[ -z "$(git ls-remote --tags origin "refs/tags/v$APP_VERSION")" ]]; then
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
   build:
     strategy:
       fail-fast: false
@@ -34,8 +57,8 @@ jobs:
           path: artifacts/*.zip
           if-no-files-found: error
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    if: needs.version.outputs.publish == 'true'
+    needs: [build, version]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -48,7 +71,7 @@ jobs:
           merge-multiple: true
       - name: Prepare source and checksums
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ needs.version.outputs.tag }}
         run: |
           APP_VERSION=$(node -p "require('./package.json').version")
           test "$VERSION" = "v$APP_VERSION"
@@ -62,8 +85,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ needs.version.outputs.tag }}
         run: |
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            git tag "$VERSION" "$GITHUB_SHA"
+            git push origin "refs/tags/$VERSION"
+          fi
           gh release create "$VERSION" --verify-tag --draft --title "Cmd Send $VERSION · 命令定向" --notes-file "docs/releases/$VERSION.md"
           gh release upload "$VERSION" release/*.zip release/SHA256SUMS.txt
           gh release edit "$VERSION" --draft=false --latest
+

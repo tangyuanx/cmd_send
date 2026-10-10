@@ -14,7 +14,7 @@ class AutomationWorker {
     readline.createInterface({input:child.stdout}).on('line',line=>{
       let response;try{response=JSON.parse(line);}catch{return;}
       const item=this.pending.get(response.id);if(!item)return;clearTimeout(item.timer);this.pending.delete(response.id);
-      if(response.ok)item.resolve(response.value);else item.reject(new Error(response.error));
+      if(response.ok)item.resolve(response.value);else item.reject(Object.assign(new Error(response.error),{code:response.code}));
     });
   }
   call(method,args={}){this.launch();return new Promise((resolve,reject)=>{
@@ -24,3 +24,4 @@ class AutomationWorker {
   dispose(){this.child?.kill();this.child=null;for(const item of this.pending.values()){clearTimeout(item.timer);item.reject(new Error('控件识别已取消'));}this.pending.clear();}
 }
 module.exports={AutomationWorker};
+

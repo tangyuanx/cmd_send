@@ -19,6 +19,7 @@ while ($null -ne ($line = [Console]::ReadLine())) {
     $request = $null
     try {
         $request = $line | ConvertFrom-Json
+        $errorCode = 'UIA_UNAVAILABLE'
         $result = $null
         switch ($request.method) {
             'pick' {
@@ -28,19 +29,23 @@ while ($null -ne ($line = [Console]::ReadLine())) {
                 for ($depth = 0; $null -ne $element -and $depth -lt 24; $depth++) {
                     $current = $element.Current
                     if ($current.ProcessId -ne [int]$request.processId) { break }
+                    if ($depth -eq 0 -and $current.ControlType.ProgrammaticName -match '\.(Button|CheckBox|RadioButton|MenuItem|ScrollBar|Slider|TabItem|Hyperlink)$') {
+                        $errorCode = 'UIA_REJECTED'
+                        throw '此区域不是文本输入区，请选择实际文本框或终端输入区'
+                    }
                     $textPattern = $null
                     $hasText = $element.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$textPattern)
                     $isEdit = $current.ControlType -eq [System.Windows.Automation.ControlType]::Edit
                     if ($current.IsEnabled -and $current.IsKeyboardFocusable -and ($isEdit -or $hasText)) {
                         $valuePattern = $null
                         $hasValue = $element.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$valuePattern)
-                        if ($hasValue -and $valuePattern.Current.IsReadOnly) { throw '此输入区为只读，不能绑定' }
+                        if ($isEdit -and $hasValue -and $valuePattern.Current.IsReadOnly) { $errorCode = 'UIA_REJECTED'; throw '此输入区为只读，不能绑定' }
                         $found = $element
                         break
                     }
                     $element = [System.Windows.Automation.TreeWalker]::RawViewWalker.GetParent($element)
                 }
-                if ($null -eq $found) { throw '此区域未提供可识别的文本输入控件，请选择实际文本框或终端输入区' }
+                if ($null -eq $found) { $result = @{ supported = $false }; break }
                 $targetId = [guid]::NewGuid().ToString()
                 $runtime = Runtime-Key $found
                 $targets[$targetId] = @{ element = $found; processId = [int]$request.processId; runtime = $runtime }
@@ -65,6 +70,7 @@ while ($null -ne ($line = [Console]::ReadLine())) {
             default { throw '未知的控件请求' }
         }
         $response = @{ id = $request.id; ok = $true; value = $result }
-    } catch { $response = @{ id = $request.id; ok = $false; error = $_.Exception.Message } }
+    } catch { $response = @{ id = $request.id; ok = $false; error = $_.Exception.Message; code = $errorCode } }
     [Console]::WriteLine(($response | ConvertTo-Json -Compress -Depth 5))
 }
+

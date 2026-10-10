@@ -1,5 +1,13 @@
 # 本地验证记录 · 2026-10-09
 
+## v0.1.2 Windows 目标识别修复 · 2026-10-10
+
+- 旧实现将非 Edit/RichEdit 控件绑定强制限制为 UI Automation Edit/TextPattern 且可聚焦；没有这些接口的终端、自绘输入区会被拒绝。新增 HWND 与客户端位置回退，发送前点击恢复焦点并记录实际焦点句柄。
+- 逐字符与回车接口原先丢弃异步 Promise，已修复，队列能等待焦点校验/投递，停止期间不会发出延迟字符。
+- Linux 本地解析/文件/队列/Windows 模拟接口测试共 24 项通过（解析测试内含 15 条断言），Windows/macOS 原生检查在当前平台明确跳过。
+- Windows 专属桌面测试启动自己的 WinForms 测试进程，绑定没有 TextPattern 的自绘输入区，验证中文/emoji/回车、切换焦点后停止、Edit 后台投递和目标关闭；由远程 Windows 构建运行。第三方终端未在本地真机验证。
+- 主分支版本变化后自动发布；仅在 Windows/macOS 测试与构建均成功时创建 Tag 并公开完整 Release。
+
 ## v0.1.1 无边框更新
 
 - 真实 Mac 窗口中仅有自定义窗口操作按钮，已去掉系统红黄绿按钮。
@@ -32,3 +40,4 @@
 建议先绑定空白文本框，验证单条、A/B/C 两轮、持续循环、暂停/继续/停止；再测试关闭目标及切换输入区不会错发，以及编辑保存、取消退出、保存退出。
 
 实现参考：[Microsoft FromPoint](https://learn.microsoft.com/en-us/dotnet/api/system.windows.automation.automationelement.frompoint)、[SetFocus](https://learn.microsoft.com/en-us/dotnet/api/system.windows.automation.automationelement.setfocus)、[GetGUIThreadInfo](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getguithreadinfo)。
+
