@@ -26,7 +26,9 @@ async function requestClose(reason='quit'){
 app.on('second-instance',()=>{if(win){if(win.isMinimized())win.restore();win.show();win.focus();}});
 app.whenReady().then(async()=>{
   sessionFile=path.join(app.getPath('userData'),'session.json');restored=await restoreSession(sessionFile,files);
-  updates=new ManualUpdates({updater:process.platform==='win32'&&app.isPackaged?require('electron-updater').autoUpdater:null,version:app.getVersion(),packaged:app.isPackaged,
+  const updater=process.platform==='win32'&&app.isPackaged?require('electron-updater').autoUpdater:null;
+  if(updater)updater.installDirectory=path.dirname(app.getPath('exe'));
+  updates=new ManualUpdates({updater,version:app.getVersion(),packaged:app.isPackaged,
     fetchRelease:async url=>{const response=await net.fetch(url,{headers:{Accept:'application/vnd.github+json'}});if(!response.ok)throw new Error(`HTTP ${response.status}`);return response.json();}});
   updates.on('state',state=>{if(state.phase==='error'&&closeReason==='update'){closing=false;approvedClose=false;closeReason=null;}emit('desktop:update',state);});
   backend=createBackend();queue=new SendQueue(backend);queue.on('state',state=>emit('desktop:queue',state));

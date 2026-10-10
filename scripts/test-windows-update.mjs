@@ -1,7 +1,7 @@
 // CI integration test: real NSIS install, real updater download, replacement and restart.
 // The loopback feed is written only into an isolated test installation.
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';import {createReadStream} from 'node:fs';
+import fs from 'node:fs/promises';import {createReadStream,realpathSync} from 'node:fs';
 import os from 'node:os';import path from 'node:path';import http from 'node:http';
 import {execFileSync,spawn} from 'node:child_process';import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';import {_electron as electron} from 'playwright';
@@ -19,9 +19,11 @@ const evidence=path.join(root,'test-output','update');await fs.mkdir(evidence,{r
 let application,page,server,mode='missing',requests=0;const checks=[];
 function passed(message){checks.push(message);console.log(`PASS: ${message}`);}
 async function until(fn,description,timeout=90000){const end=Date.now()+timeout;while(Date.now()<end){if(await fn())return;await new Promise(r=>setTimeout(r,400));}throw new Error(`Timed out: ${description}`);}
-function processes(){const p=executable.replaceAll("'","''");return JSON.parse(execFileSync('powershell.exe',['-NoProfile','-Command',`$items=@(Get-CimInstance Win32_Process -Filter "Name='cmd-send.exe'" | Where-Object { $_.ExecutablePath -eq '${p}' -and $_.CommandLine -notmatch '--type=' } | Select-Object -ExpandProperty ProcessId); ConvertTo-Json -InputObject $items -Compress`],{encoding:'utf8'}).trim()||'[]');}
-async function runInstaller(file){await new Promise((resolve,reject)=>{const child=spawn(file,['/S',`/D=${installed}`],{env,stdio:'inherit'});child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(new Error(`Installer exited ${code}`)));});}
-async function launch(){application=await electron.launch({executablePath:executable,env,timeout:60000});page=await application.firstWindow();page.on('pageerror',e=>console.error('Renderer error:',e));await page.waitForFunction(()=>window.desktop&&document.querySelector('#updateButton').textContent.startsWith('v'));}
+function processDetails(){return JSON.parse(execFileSync('powershell.exe',['-NoProfile','-Command',`$items=@(Get-CimInstance Win32_Process -Filter "Name='cmd-send.exe'" | Where-Object { $_.CommandLine -notmatch '--type=' } | Select-Object ProcessId,ExecutablePath,CommandLine); ConvertTo-Json -InputObject $items -Compress`],{encoding:'utf8'}).trim()||'[]');}
+function canonical(file){try{return realpathSync.native(file).toLowerCase();}catch{return String(file).toLowerCase();}}
+function processes(){const expected=canonical(executable);return processDetails().filter(p=>p.ExecutablePath&&canonical(p.ExecutablePath)===expected).map(p=>p.ProcessId);}
+async function runInstaller(file){await new Promise((resolve,reject)=>{const child=spawn(file,['/S',`/D=${installed}`],{env,stdio:'inherit'});const timer=setTimeout(()=>{try{execFileSync('taskkill',['/PID',String(child.pid),'/T','/F']);}catch{}reject(new Error('Installer timed out'));},120000);child.on('error',error=>{clearTimeout(timer);reject(error);});child.on('exit',code=>{clearTimeout(timer);code===0?resolve():reject(new Error(`Installer exited ${code}`));});});}
+async function launch(){application=await electron.launch({executablePath:executable,env,timeout:60000});application.process().stdout?.on('data',chunk=>process.stdout.write(chunk));page=await application.firstWindow();page.on('pageerror',e=>console.error('Renderer error:',e));await page.waitForFunction(()=>window.desktop&&document.querySelector('#updateButton').textContent.startsWith('v'));}
 async function close(){const current=application;application=null;const done=current.waitForEvent('close');await page.locator('#closeWindow').click();await done;}
 try{
   await fs.cp(path.join(root,'artifacts','Cmd Send-win32-x64'),directory,{recursive:true});
@@ -76,10 +78,10 @@ try{
   assert.equal(await page.locator('#editor').inputValue(),'升级前保存中文😀\n');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
   await page.locator('#settingsButton').click();assert.equal(await page.locator('#intervalInput').inputValue(),'1234');await page.locator('[data-close="settingsDialog"]').click();
   passed('new version retains open TXT, saved content, send settings and theme');await page.screenshot({path:path.join(evidence,'upgraded.png')});await close();
-}catch(error){if(page&&!page.isClosed())await page.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});throw error;}
+}catch(error){console.error('Restart diagnostic:',JSON.stringify({expected:canonical(executable),processes:processDetails()}));if(page&&!page.isClosed())await page.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});throw error;}
 finally{
-  if(application)await application.close().catch(()=>{});
   for(const pid of processes())try{execFileSync('taskkill',['/PID',String(pid),'/T','/F']);}catch{}
+  if(application)await application.close().catch(()=>{});
   if(server)await new Promise(r=>server.close(r));
   await fs.writeFile(path.join(evidence,'checks.json'),JSON.stringify({version,next,checks},null,2));
   await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});

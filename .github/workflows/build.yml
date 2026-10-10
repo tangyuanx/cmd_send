@@ -53,6 +53,7 @@ jobs:
       - run: npm run ${{ matrix.command }}
       - name: Verify installed Windows upgrade and restart
         if: runner.os == 'Windows'
+        timeout-minutes: 10
         run: npm run test:update
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Windows'
