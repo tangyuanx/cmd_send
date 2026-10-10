@@ -19,6 +19,13 @@ const env={...process.env,APPDATA:appData,LOCALAPPDATA:localAppData};delete env.
 const evidence=path.join(root,'test-output','update');await fs.mkdir(evidence,{recursive:true});
 let application,page,server,mode='missing',requests=0;const checks=[];
 function passed(message){checks.push(message);console.log(`PASS: ${message}`);}
+async function verifyInstalledIcons(){
+  const icon=path.join(root,'assets','icon.ico');
+  await verifyWindowsIcon(executable,icon);
+  const uninstallers=(await fs.readdir(installed)).filter(name=>/^Uninstall .*\.exe$/i.test(name));
+  assert.equal(uninstallers.length,1,'Expected one installed NSIS uninstaller');
+  await verifyWindowsIcon(path.join(installed,uninstallers[0]),icon);
+}
 async function until(fn,description,timeout=90000){const end=Date.now()+timeout;while(Date.now()<end){if(await fn())return;await new Promise(r=>setTimeout(r,400));}throw new Error(`Timed out: ${description}`);}
 function processDetails(){return JSON.parse(execFileSync('powershell.exe',['-NoProfile','-Command',`$items=@(Get-CimInstance Win32_Process -Filter "Name='cmd-send.exe'" | Where-Object { $_.CommandLine -notmatch '--type=' } | Select-Object ProcessId,ExecutablePath,CommandLine); ConvertTo-Json -InputObject $items -Compress`],{encoding:'utf8'}).trim()||'[]');}
 function canonical(file){try{return realpathSync.native(file).toLowerCase();}catch{return String(file).toLowerCase();}}
@@ -36,9 +43,7 @@ try{
   await runInstaller(path.join(root,'artifacts',`cmd-send-${version}-Windows-x64-Setup.exe`));
   assert.equal(JSON.parse(await fs.readFile(path.join(installed,'resources','app','package.json'),'utf8')).version,version);
   passed('single EXE installs into a chosen path containing spaces');
-  const icon=path.join(root,'assets','icon.ico');
-  await verifyWindowsIcon(executable,icon);
-  await verifyWindowsIcon(path.join(installed,'Uninstall Cmd Send.exe'),icon);
+  await verifyInstalledIcons();
   // Keep a Windows-rendered preview of the installed executable's real icon.
   const psQuote=value=>`'${value.replaceAll("'","''")}'`;
   execFileSync('powershell.exe',['-NoProfile','-Command',`Add-Type -AssemblyName System.Drawing; $icon=[System.Drawing.Icon]::ExtractAssociatedIcon(${psQuote(executable)}); $bitmap=$icon.ToBitmap(); $bitmap.Save(${psQuote(path.join(evidence,'installed-icon.png'))},[System.Drawing.Imaging.ImageFormat]::Png); $bitmap.Dispose(); $icon.Dispose()`]);
@@ -83,8 +88,7 @@ try{
   for(const pid of processes())execFileSync('taskkill',['/PID',String(pid),'/T','/F']);
   await until(()=>processes().length===0,'restarted process cleanup');
   await launch();assert.equal(await page.locator('#updateButton').textContent(),`v${next}`);
-  await verifyWindowsIcon(executable,icon);
-  await verifyWindowsIcon(path.join(installed,'Uninstall Cmd Send.exe'),icon);
+  await verifyInstalledIcons();
   assert.equal(await page.locator('#editor').inputValue(),'升级前保存中文😀\n');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
   await page.locator('#settingsButton').click();assert.equal(await page.locator('#intervalInput').inputValue(),'1234');await page.locator('[data-close="settingsDialog"]').click();
   passed('new version retains open TXT, saved content, send settings and theme');await page.screenshot({path:path.join(evidence,'upgraded.png')});await close();
