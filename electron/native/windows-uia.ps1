@@ -15,6 +15,7 @@ function Checked-Element($targetId) {
     }
     return $target.element
 }
+[Console]::WriteLine('{"type":"ready"}')
 while ($null -ne ($line = [Console]::ReadLine())) {
     $request = $null
     try {

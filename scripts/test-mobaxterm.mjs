@@ -73,12 +73,15 @@ try{
     for(let i=0;i<80;i++){if((await read()).includes('CMD_SEND_中😀'))break;await delay(50);}
     assert.equal((await read()).replaceAll('\r',''),'CMD_SEND_中😀\n');assert.equal(pointer(foreground()),before);
     assert.equal(await fs.readFile(wrongOutput,'utf8').catch(()=>''),'');
+    report.received=await read();report.foregroundUnchanged=pointer(foreground())===before;report.otherWindowReceived='';
+    await screen('terminal.png');
     console.log('PASS: actual MobaXterm 26.5 embedded MoTTY receives ASCII/Chinese/emoji/Enter while another app keeps focus and receives no text');
     execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore'});await delay(150);
     await assert.rejects(backend.character(target.id,'X'),/关闭|替换|失效/);
+    report.closedTargetRejected=true;
     console.log('PASS: closing the actual MobaXterm rejects subsequent delivery, with no retargeting');
   }
-  await screen('terminal.png');console.log('RECEIVED:',JSON.stringify(await read()));
+  if(probe)await screen('terminal.png');console.log('RECEIVED:',JSON.stringify(await read()));
 }catch(error){report.error=error.stack;await screen('failure.png').catch(()=>{});throw error;}
 finally{
   await fs.writeFile(path.join(evidence,'report.json'),JSON.stringify(report,null,2));backend?.dispose();
