@@ -1,6 +1,6 @@
 {
   "name": "cmd-send",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "TXT command editor and targeted desktop input for macOS and Windows",
   "main": "electron/main.cjs",
   "private": true,
@@ -14,7 +14,8 @@
     "build": "npm run build:mac && npm run build:win",
     "test:update": "node scripts/test-windows-update.mjs",
     "test:mobax": "node scripts/test-mobaxterm.mjs",
-    "test:search": "node scripts/test-search.mjs"
+    "test:search": "node scripts/test-search.mjs",
+    "test:repeat": "node scripts/test-repeat.mjs"
   },
   "dependencies": {
     "electron-updater": "6.8.9",
