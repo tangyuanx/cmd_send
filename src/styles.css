@@ -50,3 +50,66 @@ body{padding:0;display:block;overflow:hidden;background:var(--surface)}
 .find-line{position:absolute;left:0;right:0;height:var(--lh);background:var(--find-line);box-shadow:inset 3px 0 var(--find-outline);pointer-events:none;z-index:0}
 .has-find-matches .current-line{display:none}
 @media(max-width:600px){.find-bar{top:auto;right:auto;margin:8px 10px 4px;width:calc(100% - 20px);gap:3px;padding-left:7px}.find-count{padding:0;font-size:10px}}
+
+/* Approved clarity preview: Times for Latin, Heiti for Chinese. */
+:root{
+  --app-font:'Times New Roman',Times,'Nimbus Roman',SimHei,'黑体','Heiti SC','Noto Sans CJK SC',serif;
+  --lh:32px;
+  --editor-pad:24px;
+  --border:#d8d8d8;
+  --secondary:#626262;
+  --muted:#626262;
+  --comment:#626262;
+}
+:root[data-theme=dark]{--border:#404040;--secondary:#a5a5a5;--muted:#a5a5a5;--comment:#a5a5a5}
+body{font-family:var(--app-font);font-size:15px;line-height:1.5}
+.syntax-text,.editor{font-family:var(--app-font);font-size:16px;padding-top:20px}
+.prefix-input{font-family:var(--app-font)}
+.brand{font-size:16px;font-weight:500}
+.brand-en,.demo-badge,.tiny-tag,.sidebar-note,.status-message,.editor-metadata,
+.repeat-hint,.rail-shortcuts,.find-count,.setting-row p,.unit-input span,
+.segmented button,.settings-footnote,.dialog-heading p,.native-notice,
+.target-item small,.target-item .target-demo-tag,kbd,.help-note,.toast,
+.update-notes,.update-hint{font-size:13px}
+.update-hint{font-size:13px!important}
+.target-button,.file-button,.scene-button,.setting-row label,.help-content,
+.secondary-button,.primary-button,.target-item strong,.update-body>p{font-size:15px}
+.menu-file>button:first-child,.menu-open,.rail-settings,.find-bar input,
+select,.number-input,.prefix-input{font-size:14px}
+.syntax-text .section-line,.dialog-heading h2{font-weight:500}
+.dialog-heading h2{font-size:19px;letter-spacing:0}
+.window-title{height:48px}
+.toolbar{height:66px}
+.target-button,.file-button{height:38px}
+.scene-sidebar{width:158px;padding-top:17px}
+.scene-button{min-height:42px}
+.scene-button svg{width:16px;height:16px;opacity:1}
+.sidebar-note{white-space:normal}
+.action-sidebar{width:172px;padding:20px 16px 12px;background:var(--surface)}
+.action-sidebar .send-button,.action-sidebar .repeat-button{height:42px;font-size:15px}
+.action-sidebar .run-controls button{height:38px;font-size:15px}
+.rail-settings{font-size:14px}
+.rail-shortcuts{font-size:13px}
+.statusbar{height:42px}
+.editor-hint{display:none}
+svg{stroke-width:1.8}
+.setting-row{padding:12px 0}
+.setting-row>div:first-child{min-width:0}
+.unit-input,select,.number-input,.prefix-input{flex-shrink:0}
+.settings-footnote{min-width:0}
+@media(max-width:850px){
+  .action-sidebar{width:150px;padding:20px 12px 12px}
+  .scene-sidebar{width:138px}
+}
+@media(max-width:600px){
+  .workspace{grid-template-columns:minmax(0,1fr) 126px}
+  .scene-sidebar{width:100%;padding:7px 12px}
+  .scene-button{font-size:13px;min-height:33px}
+  .action-sidebar{width:auto;padding:16px 9px 10px}
+  .action-sidebar .send-button,.action-sidebar .repeat-button{font-size:14px;gap:6px}
+  .target-button,.file-button{font-size:14px}
+  .rail-settings,.status-message #statusText,.find-count{font-size:13px}
+  .syntax-text,.editor{font-size:16px}
+  .settings-footnote{font-size:13px}
+  .theme-row{gap:10px}
+}
