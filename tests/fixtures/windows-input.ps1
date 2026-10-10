@@ -42,8 +42,8 @@ $form.Controls.Add($raw)
 $form.Controls.Add($edit)
 $form.Show()
 $form.Activate()
-$raw.Focus() | Out-Null
+$edit.Focus() | Out-Null
 $point = $raw.PointToScreen((New-Object System.Drawing.Point(40,40)))
 $editPoint = $edit.PointToScreen((New-Object System.Drawing.Point(40,10)))
-[Console]::WriteLine((@{ ready = $true; raw = @{ x = $point.X; y = $point.Y }; edit = @{ x = $editPoint.X; y = $editPoint.Y }; window = $form.Handle.ToInt64() } | ConvertTo-Json -Compress))
+[Console]::WriteLine((@{ ready = $true; raw = @{ x = $point.X; y = $point.Y; handle = $raw.Handle.ToInt64() }; edit = @{ x = $editPoint.X; y = $editPoint.Y; handle = $edit.Handle.ToInt64() }; window = $form.Handle.ToInt64() } | ConvertTo-Json -Compress))
 [System.Windows.Forms.Application]::Run($form)

@@ -28,6 +28,7 @@ test('Windows desktop: bind a control without TextPattern, deliver Unicode/Enter
     });
     const koffi=require('koffi'),user=koffi.load('user32.dll');
     const cursor=user.func('int __stdcall SetCursorPos(int x, int y)');
+    const metrics=user.func('int __stdcall GetSystemMetrics(int index)');
     backend=require('../electron/native/windows.cjs').createBackend();
     cursor(ready.raw.x,ready.raw.y);const raw=await backend.pick();
     assert.equal(raw.strategy,'所选区域聚焦输入','fixture must exercise the no-TextPattern path');
@@ -38,7 +39,11 @@ test('Windows desktop: bind a control without TextPattern, deliver Unicode/Enter
     // Change the actual focused child by a real click, without changing foreground window.
     cursor(ready.edit.x,ready.edit.y);
     const input=user.func('uint32_t __stdcall SendInput(uint32_t count, const void *inputs, int size)');
-    const clicks=Buffer.alloc(80);clicks.writeUInt32LE(2,24);clicks.writeUInt32LE(4,64);assert.equal(input(2,clicks,40),2);
+    const clicks=Buffer.alloc(120);
+    const x=Math.round((ready.edit.x-metrics(76))*65535/(metrics(78)-1));
+    const y=Math.round((ready.edit.y-metrics(77))*65535/(metrics(79)-1));
+    for(let i=0;i<3;i++){clicks.writeInt32LE(x,i*40+8);clicks.writeInt32LE(y,i*40+12);clicks.writeUInt32LE(0x8000|0x4000|[1,2,4][i],i*40+24);}
+    assert.equal(input(3,clicks,40),3);
     await delay(100);await assert.rejects(backend.character(raw.id,'X'),/焦点/);
     backend.finish(raw.id,context);
     cursor(ready.edit.x,ready.edit.y);const edit=await backend.pick();assert.equal(edit.strategy,'后台文本输入');

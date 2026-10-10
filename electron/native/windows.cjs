@@ -9,7 +9,7 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
   const GUI=koffi.struct('CmdWinGui',{cbSize:'uint32_t',flags:'uint32_t',active:'void *',focus:'void *',capture:'void *',menuOwner:'void *',moveSize:'void *',caret:'void *',caretRect:RECT});
   const api={
     cursor:user.func('int __stdcall GetCursorPos(_Out_ CmdWinPoint *point)'),setCursor:user.func('int __stdcall SetCursorPos(int x, int y)'),fromPoint:user.func('void * __stdcall WindowFromPoint(CmdWinPoint point)'),ancestor:user.func('void * __stdcall GetAncestor(void *window, uint32_t flags)'),
-    toClient:user.func('int __stdcall ScreenToClient(void *window, _Inout_ CmdWinPoint *point)'),toScreen:user.func('int __stdcall ClientToScreen(void *window, _Inout_ CmdWinPoint *point)'),clientRect:user.func('int __stdcall GetClientRect(void *window, _Out_ CmdWinRect *rect)'),iconic:user.func('int __stdcall IsIconic(void *window)'),
+    toClient:user.func('int __stdcall ScreenToClient(void *window, _Inout_ CmdWinPoint *point)'),toScreen:user.func('int __stdcall ClientToScreen(void *window, _Inout_ CmdWinPoint *point)'),clientRect:user.func('int __stdcall GetClientRect(void *window, _Out_ CmdWinRect *rect)'),iconic:user.func('int __stdcall IsIconic(void *window)'),metrics:user.func('int __stdcall GetSystemMetrics(int index)'),
     pid:user.func('uint32_t __stdcall GetWindowThreadProcessId(void *window, _Out_ uint32_t *pid)'),valid:user.func('int __stdcall IsWindow(void *window)'),enabled:user.func('int __stdcall IsWindowEnabled(void *window)'),
     className:user.func('int __stdcall GetClassNameW(void *window, _Out_ uint16_t *text, int length)'),title:user.func('int __stdcall GetWindowTextW(void *window, _Out_ uint16_t *text, int length)'),
     style:user.func('intptr_t __stdcall GetWindowLongPtrW(void *window, int index)'),
@@ -52,8 +52,15 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
     const previous={};if(!api.cursor(previous)||!api.setCursor(point.x,point.y))throw new Error('无法定位目标输入区');
     try{
       if(t.epoch!==epoch||!same(api.foreground(),t.window)||!same(api.fromPoint(point),t.element))throw new Error('目标输入区已改变，未发送任何内容');
-      const bytes=Buffer.alloc(80);bytes.writeUInt32LE(2,24);bytes.writeUInt32LE(4,64);
-      if(api.input(2,bytes,40)!==2)throw new Error('无法聚焦所选输入区，可能存在权限限制；未发送文字');
+      // SendInput keeps its own mouse event coordinates. SetCursorPos alone
+      // does not guarantee that a following injected button lands there.
+      const width=api.metrics(78),height=api.metrics(79);
+      if(width<2||height<2)throw new Error('无法定位桌面输入区域');
+      const x=Math.round((point.x-api.metrics(76))*65535/(width-1));
+      const y=Math.round((point.y-api.metrics(77))*65535/(height-1));
+      const bytes=Buffer.alloc(120);
+      for(let i=0;i<3;i++){bytes.writeInt32LE(x,i*40+8);bytes.writeInt32LE(y,i*40+12);bytes.writeUInt32LE(0x8000|0x4000|[1,2,4][i],i*40+24);}
+      if(api.input(3,bytes,40)!==3)throw new Error('无法聚焦所选输入区，可能存在权限限制；未发送文字');
       // Let the target process the click before restoring the pointer.
       await sleep(70);
     }finally{const cursor={};if(api.cursor(cursor)&&cursor.x===point.x&&cursor.y===point.y)api.setCursor(previous.x,previous.y);}

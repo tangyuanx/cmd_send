@@ -16,7 +16,7 @@ function setup({className='CustomTerminal',automation=null,pickError=null}={}){
     GetForegroundWindow:()=>state.foreground,SetForegroundWindow:h=>{if(state.activate)state.foreground=h;return +state.activate;},
     SetFocus:()=>10,AttachThreadInput:()=>1,IsChild:(parent,child)=>+(parent===1&&child===10),ShowWindow:()=>1,IsIconic:()=>0,
     ScreenToClient:(_h,p)=>{p.x-=100;p.y-=200;return 1;},ClientToScreen:(_h,p)=>{p.x+=100;p.y+=200;return 1;},
-    GetClientRect:(_h,r)=>{Object.assign(r,{left:0,top:0,right:400,bottom:300});return 1;},GetAsyncKeyState:()=>0,
+    GetClientRect:(_h,r)=>{Object.assign(r,{left:0,top:0,right:400,bottom:300});return 1;},GetAsyncKeyState:()=>0,GetSystemMetrics:index=>({76:0,77:0,78:1920,79:1080})[index],
     SendMessageTimeoutW:()=>1,
     SendInput:(n,b)=>{
       if(b.readUInt32LE(0)===0){state.clicks++;if(state.failClick)return 0;state.focus=10;}
