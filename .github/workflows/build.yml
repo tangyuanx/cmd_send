@@ -70,9 +70,29 @@ jobs:
             artifacts/*.blockmap
             artifacts/latest.yml
           if-no-files-found: error
+  mobaxterm:
+    name: Real MobaXterm compatibility
+    runs-on: windows-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node scripts/test-mobaxterm.mjs
+        env:
+          CMD_SEND_MOBAX_PROBE: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobaxterm-evidence
+          path: test-output/mobaxterm/
+          if-no-files-found: ignore
   release:
     if: needs.version.outputs.publish == 'true'
-    needs: [build, version]
+    needs: [build, version, mobaxterm]
     runs-on: ubuntu-latest
     permissions:
       contents: write
