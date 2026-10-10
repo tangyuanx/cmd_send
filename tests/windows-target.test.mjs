@@ -19,7 +19,11 @@ function setup({className='CustomTerminal',automation=null,pickError=null}={}){
     GetClientRect:(_h,r)=>{Object.assign(r,{left:0,top:0,right:400,bottom:300});return 1;},GetAsyncKeyState:()=>0,GetSystemMetrics:index=>({76:0,77:0,78:1920,79:1080})[index],
     SendMessageTimeoutW:()=>1,
     SendInput:(n,b)=>{
-      if(b.readUInt32LE(0)===0){state.clicks++;if(state.failClick)return 0;state.focus=10;}
+      if(b.readUInt32LE(0)===0){
+        assert.equal(n,3);assert.equal(b.length,120);
+        for(let i=0;i<3;i++){assert.equal(b.readUInt32LE(i*40+20),0x8000|0x4000|[1,2,4][i]);assert.equal(b.readUInt32LE(i*40+24),0,'MOUSEINPUT time must not contain flags');}
+        state.clicks++;if(state.failClick)return 0;state.focus=10;
+      }
       else{state.keys.push(b.readUInt16LE(10)||b.readUInt16LE(8));if(state.shortInput)return 1;}
       return n;
     },

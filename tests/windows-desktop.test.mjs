@@ -42,7 +42,7 @@ test('Windows desktop: bind a control without TextPattern, deliver Unicode/Enter
     const clicks=Buffer.alloc(120);
     const x=Math.round((ready.edit.x-metrics(76))*65535/(metrics(78)-1));
     const y=Math.round((ready.edit.y-metrics(77))*65535/(metrics(79)-1));
-    for(let i=0;i<3;i++){clicks.writeInt32LE(x,i*40+8);clicks.writeInt32LE(y,i*40+12);clicks.writeUInt32LE(0x8000|0x4000|[1,2,4][i],i*40+24);}
+    for(let i=0;i<3;i++){clicks.writeInt32LE(x,i*40+8);clicks.writeInt32LE(y,i*40+12);clicks.writeUInt32LE(0x8000|0x4000|[1,2,4][i],i*40+20);}
     assert.equal(input(3,clicks,40),3);
     await delay(100);await assert.rejects(backend.character(raw.id,'X'),/焦点/);
     backend.finish(raw.id,context);

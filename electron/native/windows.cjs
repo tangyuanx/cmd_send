@@ -59,7 +59,7 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
       const x=Math.round((point.x-api.metrics(76))*65535/(width-1));
       const y=Math.round((point.y-api.metrics(77))*65535/(height-1));
       const bytes=Buffer.alloc(120);
-      for(let i=0;i<3;i++){bytes.writeInt32LE(x,i*40+8);bytes.writeInt32LE(y,i*40+12);bytes.writeUInt32LE(0x8000|0x4000|[1,2,4][i],i*40+24);}
+      for(let i=0;i<3;i++){bytes.writeInt32LE(x,i*40+8);bytes.writeInt32LE(y,i*40+12);bytes.writeUInt32LE(0x8000|0x4000|[1,2,4][i],i*40+20);}
       if(api.input(3,bytes,40)!==3)throw new Error('无法聚焦所选输入区，可能存在权限限制；未发送文字');
       // Let the target process the click before restoring the pointer.
       await sleep(70);
