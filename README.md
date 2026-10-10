@@ -4,6 +4,8 @@ Windows / macOS 桌面工具：编辑 UTF-8 TXT，将光标所在命令或所选
 
 窗口采用统一的无边框界面：顶部空白区域可拖动，右上角提供最小化、最大化/还原和关闭按钮。关闭前检查未保存修改，并停止剩余发送任务。Windows 不显示系统菜单栏；打开文件、保存和关闭窗口分别支持 Ctrl+O、Ctrl+S、Ctrl+W，Mac 对应使用 ⌘。
 
+程序、安装器和快捷方式采用与主界面左上角一致的终端图标：深灰圆角底、白色「>_」符号。
+
 ## 运行
 
 - Mac：解压 macOS arm64 包，打开 `Cmd Send.app`。适用于 Apple Silicon。首次打开后，在「系统设置 → 隐私与安全性 → 辅助功能」添加并允许该应用，再退出并重新打开。可以在工具的「选择目标」说明中打开这个设置页；授权需本人完成。
@@ -41,6 +43,8 @@ npm start
 npm run build:mac
 npm run build:win
 ```
+
+图标源文件为 `assets/icon.svg`。需要重新生成时，安装 `CairoSVG==2.9.1`、`Pillow==12.3.0` 后运行 `python scripts/generate-icons.py`；正常构建直接使用仓库内的 PNG、ICO 和 ICNS。构建会检查实际应用图标资源，Windows 安装升级验证还会检查安装后的程序及卸载器。
 
 Node.js 22+；Mac 上可交叉打包 Windows x64。产物位于 `artifacts/`。macOS 包为本地 ad-hoc 签名，未使用 Developer ID、未公证；Windows 安装包未代码签名。Windows 测试包含真实自绘输入控件的绑定、中文/emoji/回车、焦点改变后停止与标准文本框投递；具体终端软件的兼容性仍需实机验证。`npm run test:mobax` 在 Windows 上下载官方 MobaXterm Home Edition 26.5 临时测试包（固定 SHA-256），实际验证终端收到中文、emoji、回车，另一应用保持焦点且不收到文字，关闭目标后停止投递；不会将 MobaXterm 打入发行包。Windows 上构建完成后可执行 `npm run test:update`，验证真实安装、手动检查、下载校验、原地升级、自动重启与文件/设置恢复。测试使用隔离安装目录和本机更新源，不发布测试版本。
 

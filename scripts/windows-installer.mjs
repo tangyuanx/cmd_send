@@ -11,8 +11,9 @@ export async function windowsInstaller({root,directory,output,version}){
     config:{appId:'com.tangyuanx.cmd-send',productName:'Cmd Send',asar:false,
       directories:{output},extraMetadata:{version},
       publish:{provider:'github',owner:'tangyuanx',repo:'cmd_send'},
-      win:{executableName:'cmd-send',signAndEditExecutable:false},
+      win:{executableName:'cmd-send',icon:path.join(root,'assets','icon.ico'),signAndEditExecutable:false},
       nsis:{artifactName:`cmd-send-${version}-Windows-x64-Setup.exe`,
+        installerIcon:path.join(root,'assets','icon.ico'),uninstallerIcon:path.join(root,'assets','icon.ico'),
         oneClick:false,perMachine:false,allowElevation:false,
         allowToChangeInstallationDirectory:true,deleteAppDataOnUninstall:false,
         shortcutName:'命令定向',runAfterFinish:true}}});

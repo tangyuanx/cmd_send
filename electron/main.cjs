@@ -32,7 +32,7 @@ app.whenReady().then(async()=>{
     fetchRelease:async url=>{const response=await net.fetch(url,{headers:{Accept:'application/vnd.github+json'}});if(!response.ok)throw new Error(`HTTP ${response.status}`);return response.json();}});
   updates.on('state',state=>{if(state.phase==='error'&&closeReason==='update'){closing=false;approvedClose=false;closeReason=null;}emit('desktop:update',state);});
   backend=createBackend();queue=new SendQueue(backend);queue.on('state',state=>emit('desktop:queue',state));
-  win=new BrowserWindow({width:1040,height:760,minWidth:680,minHeight:440,title:'命令定向',backgroundColor:'#f7f7f8',show:false,frame:false,
+  win=new BrowserWindow({width:1040,height:760,minWidth:680,minHeight:440,title:'命令定向',icon:path.join(__dirname,'../assets/icon.png'),backgroundColor:'#f7f7f8',show:false,frame:false,
     webPreferences:{preload:path.join(__dirname,'preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true}});
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   win.webContents.on('will-navigate',(event,url)=>{if(url!==page)event.preventDefault();});

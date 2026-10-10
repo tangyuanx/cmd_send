@@ -6,6 +6,7 @@ import os from 'node:os';import path from 'node:path';import http from 'node:htt
 import {execFileSync,spawn} from 'node:child_process';import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';import {_electron as electron} from 'playwright';
 import {windowsInstaller} from './windows-installer.mjs';
+import {verifyWindowsIcon} from './verify-icons.mjs';
 const require=createRequire(import.meta.url),yaml=require('js-yaml');
 if(process.platform!=='win32')throw new Error('This integration test requires Windows');
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
@@ -35,6 +36,13 @@ try{
   await runInstaller(path.join(root,'artifacts',`cmd-send-${version}-Windows-x64-Setup.exe`));
   assert.equal(JSON.parse(await fs.readFile(path.join(installed,'resources','app','package.json'),'utf8')).version,version);
   passed('single EXE installs into a chosen path containing spaces');
+  const icon=path.join(root,'assets','icon.ico');
+  await verifyWindowsIcon(executable,icon);
+  await verifyWindowsIcon(path.join(installed,'Uninstall Cmd Send.exe'),icon);
+  // Keep a Windows-rendered preview of the installed executable's real icon.
+  const psQuote=value=>`'${value.replaceAll("'","''")}'`;
+  execFileSync('powershell.exe',['-NoProfile','-Command',`Add-Type -AssemblyName System.Drawing; $icon=[System.Drawing.Icon]::ExtractAssociatedIcon(${psQuote(executable)}); $bitmap=$icon.ToBitmap(); $bitmap.Save(${psQuote(path.join(evidence,'installed-icon.png'))},[System.Drawing.Imaging.ImageFormat]::Png); $bitmap.Dispose(); $icon.Dispose()`]);
+  passed('installed executable and uninstaller retain the custom terminal icon');
   server=http.createServer((req,res)=>{
     requests++;const pathname=new URL(req.url,'http://localhost').pathname;
     if(pathname==='/latest.yml'){
@@ -75,6 +83,8 @@ try{
   for(const pid of processes())execFileSync('taskkill',['/PID',String(pid),'/T','/F']);
   await until(()=>processes().length===0,'restarted process cleanup');
   await launch();assert.equal(await page.locator('#updateButton').textContent(),`v${next}`);
+  await verifyWindowsIcon(executable,icon);
+  await verifyWindowsIcon(path.join(installed,'Uninstall Cmd Send.exe'),icon);
   assert.equal(await page.locator('#editor').inputValue(),'升级前保存中文😀\n');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
   await page.locator('#settingsButton').click();assert.equal(await page.locator('#intervalInput').inputValue(),'1234');await page.locator('[data-close="settingsDialog"]').click();
   passed('new version retains open TXT, saved content, send settings and theme');await page.screenshot({path:path.join(evidence,'upgraded.png')});await close();
