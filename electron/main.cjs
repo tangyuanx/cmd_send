@@ -1,12 +1,15 @@
 'use strict';
-const {app,BrowserWindow,ipcMain,dialog,Menu,shell}=require('electron');
+const {app,BrowserWindow,ipcMain,dialog,Menu,shell,net}=require('electron');
 const path=require('node:path');
 const {pathToFileURL}=require('node:url');
 const {FileStore}=require('./files.cjs');
 const {SendQueue}=require('./queue.cjs');
 const {createBackend}=require('./native/index.cjs');
+const {ManualUpdates,RELEASE_PAGE}=require('./updates.cjs');
+const {restoreSession,saveSession}=require('./session.cjs');
 app.setName('命令定向');
-let win,backend,queue,picker,closing=false,approvedClose=false;
+if(!app.requestSingleInstanceLock()){app.quit();}else{
+let win,backend,queue,picker,updates,sessionFile,restored,closing=false,approvedClose=false,closeReason=null,finalizingClose=false;
 const files=new FileStore();
 const page=pathToFileURL(path.join(__dirname,'../src/index.html')).href;
 function cancelPick(){if(!picker)return;clearInterval(picker.timer);picker.resolve({cancelled:true});picker=null;}
@@ -17,10 +20,15 @@ function handle(name,fn){ipcMain.handle(name,async(event,...args)=>{
   try{return {ok:true,value:await fn(...args)};}catch(error){return {ok:false,error:String(error.message||error)};}
 });}
 function unlocked(){if(queue?.run)throw new Error('发送期间不能修改文件或目标');}
-async function requestClose(){
-  if(closing)return;closing=true;cancelPick();await queue?.stop();emit('desktop:request-close');
+async function requestClose(reason='quit'){
+  if(closing)return;closing=true;closeReason=reason;cancelPick();await queue?.stop();emit('desktop:request-close',{reason});
 }
-app.whenReady().then(()=>{
+app.on('second-instance',()=>{if(win){if(win.isMinimized())win.restore();win.show();win.focus();}});
+app.whenReady().then(async()=>{
+  sessionFile=path.join(app.getPath('userData'),'session.json');restored=await restoreSession(sessionFile,files);
+  updates=new ManualUpdates({updater:process.platform==='win32'&&app.isPackaged?require('electron-updater').autoUpdater:null,version:app.getVersion(),packaged:app.isPackaged,
+    fetchRelease:async url=>{const response=await net.fetch(url,{headers:{Accept:'application/vnd.github+json'}});if(!response.ok)throw new Error(`HTTP ${response.status}`);return response.json();}});
+  updates.on('state',state=>{if(state.phase==='error'&&closeReason==='update'){closing=false;approvedClose=false;closeReason=null;}emit('desktop:update',state);});
   backend=createBackend();queue=new SendQueue(backend);queue.on('state',state=>emit('desktop:queue',state));
   win=new BrowserWindow({width:1040,height:760,minWidth:680,minHeight:440,title:'命令定向',backgroundColor:'#f7f7f8',show:false,frame:false,
     webPreferences:{preload:path.join(__dirname,'preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true}});
@@ -33,14 +41,18 @@ app.whenReady().then(()=>{
   win.on('close',event=>{if(!approvedClose){event.preventDefault();void requestClose();}});
   win.on('closed',()=>{cancelPick();backend.dispose();win=null;app.quit();});
   for(const event of ['maximize','unmaximize','enter-full-screen','leave-full-screen'])win.on(event,()=>emit('desktop:window-state',windowState()));
-  handle('desktop:config',()=>({platform:process.platform,version:app.getVersion(),accessibility:backend.permission(),window:windowState()}));
+  handle('desktop:config',()=>({platform:process.platform,version:app.getVersion(),accessibility:backend.permission(),window:windowState(),update:updates.snapshot(),session:restored}));
   handle('desktop:window-minimize',()=>win.minimize());
   handle('desktop:window-maximize',()=>{
     if(win.isFullScreen())win.setFullScreen(false);
     else if(win.isMaximized())win.unmaximize();
     else win.maximize();
   });
-  handle('desktop:window-close',requestClose);
+  handle('desktop:window-close',()=>requestClose());
+  handle('desktop:update-check',()=>updates.check());
+  handle('desktop:update-download',()=>updates.download());
+  handle('desktop:update-page',()=>shell.openExternal(RELEASE_PAGE));
+  handle('desktop:update-install',()=>{if(updates.state.phase!=='downloaded')throw new Error('升级包尚未下载完成');return requestClose('update');});
   handle('desktop:open',async()=>{
     unlocked();const selection=await dialog.showOpenDialog(win,{title:'打开 TXT 文件',properties:['openFile','multiSelections'],filters:[{name:'UTF-8 文本',extensions:['txt']} ]});
     const results=[];for(const file of selection.filePaths){try{results.push(await files.open(file));}catch(error){await dialog.showMessageBox(win,{type:'error',message:`无法打开 ${path.basename(file)}`,detail:error.message});}}
@@ -74,11 +86,17 @@ app.whenReady().then(()=>{
     });
   });
   handle('desktop:cancel-pick',cancelPick);
-  handle('desktop:start',options=>{if(picker)throw new Error('请先完成目标拾取');return queue.start(options||{});});
+  handle('desktop:start',options=>{if(closing)throw new Error('请先完成退出或升级确认');if(picker)throw new Error('请先完成目标拾取');return queue.start(options||{});});
   handle('desktop:pause',()=>queue.pause());handle('desktop:resume',()=>queue.resume());handle('desktop:stop',()=>queue.stop());
-  handle('desktop:close-response',async confirm=>{
-    if(confirm!==true){closing=false;return;}
-    await queue.stop();approvedClose=true;win.close();
+  handle('desktop:close-response',async(confirm,activeId)=>{
+    if(finalizingClose)return;
+    if(confirm!==true){closing=false;closeReason=null;return;}
+    if(!closing)throw new Error('退出请求已取消');
+    finalizingClose=true;
+    try{await queue.stop();await saveSession(sessionFile,files,activeId);approvedClose=true;
+      if(closeReason==='update')updates.install();else win.close();
+    }catch(error){closing=false;approvedClose=false;closeReason=null;throw error;}
+    finally{finalizingClose=false;}
   });
   const edit={label:'编辑',submenu:[{role:'undo',label:'撤销'},{role:'redo',label:'重做'},{type:'separator'},{role:'cut',label:'剪切'},{role:'copy',label:'复制'},{role:'paste',label:'粘贴'},{role:'selectAll',label:'全选'}]};
   Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -91,3 +109,5 @@ app.whenReady().then(()=>{
 }).catch(error=>{dialog.showErrorBox('无法启动命令定向',error.stack||error.message);app.exit(1);});
 app.on('before-quit',event=>{if(win&&!approvedClose){event.preventDefault();void requestClose();}});
 app.on('window-all-closed',()=>app.quit());
+}
+

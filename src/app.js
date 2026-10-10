@@ -10,7 +10,7 @@ function buffer(name,text,extras={}){const normalized=text.replace(/\r\n/g,'\n')
 let files=[],activeId=null;
 let target=null,run=null,toastTimer=null,closingId=null,composing=false,picking=false,holdTimer=null,held=false,findMatches=[],findIndex=-1;
 const settings={enter:true,interval:500,repeat:'once',rounds:10,prefixes:['#','//',';'],theme:'system'};
-try{settings.theme=localStorage.getItem('courier-theme')||'system';}catch{}
+try{const saved=JSON.parse(localStorage.getItem('courier-settings')||'{}');if(typeof saved.enter==='boolean')settings.enter=saved.enter;if(Number.isFinite(saved.interval))settings.interval=Math.max(50,Math.min(600000,saved.interval));if(['once','count','loop'].includes(saved.repeat))settings.repeat=saved.repeat;if(Number.isFinite(saved.rounds))settings.rounds=Math.max(1,Math.min(100000,saved.rounds));if(Array.isArray(saved.prefixes)&&saved.prefixes.every(x=>typeof x==='string'))settings.prefixes=saved.prefixes;settings.theme=localStorage.getItem('courier-theme')||'system';}catch{}
 const systemTheme=matchMedia('(prefers-color-scheme: dark)');
 const active=()=>files.find(f=>f.id===activeId);
 function escaped(s){return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');}
@@ -57,7 +57,7 @@ $('accessibilityButton').addEventListener('click',async()=>{try{await desktop.op
 $('settingsButton').addEventListener('click',()=>{if(run)return;$('enterToggle').checked=settings.enter;$('intervalInput').value=settings.interval;$('repeatSelect').value=settings.repeat;$('roundsInput').value=settings.rounds;$('roundsRow').hidden=settings.repeat!=='count';$('prefixInput').value=settings.prefixes.join(', ');showDialog('settingsDialog');});
 $('repeatSelect').addEventListener('change',()=>$('roundsRow').hidden=$('repeatSelect').value!=='count');
 document.querySelectorAll('button[data-theme]').forEach(b=>b.addEventListener('click',()=>{settings.theme=b.dataset.theme;applyTheme();try{localStorage.setItem('courier-theme',settings.theme);}catch{}}));
-$('settingsForm').addEventListener('submit',e=>{e.preventDefault();settings.enter=$('enterToggle').checked;settings.interval=Math.max(50,Math.min(600000,Number($('intervalInput').value)));settings.repeat=$('repeatSelect').value;settings.rounds=Math.max(1,Math.min(100000,Number($('roundsInput').value)));settings.prefixes=$('prefixInput').value.split(',').map(s=>s.trim()).filter(Boolean);renderSyntax();renderControls();$('settingsDialog').close();toast('发送设置已更新');});
+$('settingsForm').addEventListener('submit',e=>{e.preventDefault();settings.enter=$('enterToggle').checked;settings.interval=Math.max(50,Math.min(600000,Number($('intervalInput').value)));settings.repeat=$('repeatSelect').value;settings.rounds=Math.max(1,Math.min(100000,Number($('roundsInput').value)));settings.prefixes=$('prefixInput').value.split(',').map(s=>s.trim()).filter(Boolean);try{localStorage.setItem('courier-settings',JSON.stringify(settings));}catch{}renderSyntax();renderControls();$('settingsDialog').close();toast('发送设置已更新');});
 async function startSending(continuous=false){if(run||picking||document.querySelector('dialog[open]')||composing)return;const f=active();if(!f)return;if(!target){toast('请先选择发送目标');return;}syncSelection();const plan=sendPlan(f.text,f.start,f.end,settings.prefixes,continuous?false:f.exhausted);if(!plan.commands.length){toast(plan.atEnd?'已到文件末尾；移动光标后可重新发送':'选区中没有有效命令');status(plan.atEnd?'已到文件末尾':'没有有效命令');return;}const repeat=continuous?'loop':settings.repeat;
  const current={id:null,continuous:repeat==='loop',fileId:f.id,plan,paused:false,total:0,start:f.start,end:f.end};run=current;hideMenu();$('findBar').hidden=true;renderControls();
  try{const result=await desktop.start({commands:plan.commands.map(c=>c.text),targetId:target.id,interval:Math.round(settings.interval),rounds:repeat==='loop'?'loop':repeat==='count'?Math.round(settings.rounds):1,enter:settings.enter});if(run===current)current.id=result.id;}catch(error){if(run===current){run=null;renderControls();status('发送未开始');}toast(error.message);}
@@ -79,16 +79,39 @@ function navigateFind(direction=1){if(!findMatches.length)return;findIndex=(find
 $('findInput').addEventListener('input',()=>refreshFind());$('findInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();navigateFind(e.shiftKey?-1:1);}});$('findPrevious').addEventListener('click',()=>navigateFind(-1));$('findNext').addEventListener('click',()=>navigateFind());$('findClose').addEventListener('click',()=>{$('findBar').hidden=true;$('editor').focus({preventScroll:true});});
 document.addEventListener('keydown',e=>{if(e.isComposing||composing)return;const modal=document.querySelector('dialog[open]');if(e.key==='Escape'){if(modal)return;e.preventDefault();if(picking){cancelPicking();return;}if(!$('fileMenu').hidden){hideMenu();return;}if(!$('findBar').hidden){$('findBar').hidden=true;$('editor').focus({preventScroll:true});return;}if(run)stopSending();return;}if(modal)return;const mod=e.ctrlKey||e.metaKey;if(mod&&e.key.toLowerCase()==='o'){e.preventDefault();openFiles();}else if(mod&&e.key.toLowerCase()==='w'){e.preventDefault();desktop.closeWindow().catch(error=>toast(error.message));}else if(mod&&e.key.toLowerCase()==='s'){e.preventDefault();saveFile();}else if(mod&&e.key==='Enter'){e.preventDefault();startSending();}else if(mod&&e.key.toLowerCase()==='f'){e.preventDefault();openFind();}});
 desktop.onOpen(()=>{if(!document.querySelector('dialog[open]'))openFiles();});desktop.onSave(()=>{if(!document.querySelector('dialog[open]'))saveFile();});
-desktop.onClose(()=>{document.querySelectorAll('dialog[open]').forEach(d=>d.close());hideMenu();if(files.some(changed)){$('quitDescription').textContent=`${files.filter(changed).length} 个文件有未保存的修改。发送任务已停止。`;showDialog('quitDialog');}else desktop.closeResponse(true);});
+function finishClose(){return desktop.closeResponse(true,activeId).catch(error=>toast(error.message));}
+desktop.onClose(event=>{document.querySelectorAll('dialog[open]').forEach(d=>d.close());hideMenu();const update=event?.reason==='update';$('quitTitle').textContent=update?'保存修改后升级并重启？':'保存修改后退出？';$('cancelQuit').textContent=update?'暂不升级':'取消退出';$('discardQuit').textContent=update?'不保存并升级':'不保存退出';$('saveQuit').textContent=update?'保存并升级':'保存并退出';if(files.some(changed)){$('quitDescription').textContent=`${files.filter(changed).length} 个文件有未保存的修改。发送任务已停止。`;showDialog('quitDialog');}else finishClose();});
 $('cancelQuit').addEventListener('click',()=>{$('quitDialog').close();desktop.closeResponse(false);});
 $('quitDialog').addEventListener('cancel',()=>desktop.closeResponse(false));
-$('discardQuit').addEventListener('click',()=>desktop.closeResponse(true));
-$('saveQuit').addEventListener('click',async()=>{for(const f of files.filter(changed))if(!await saveFile(f))return;desktop.closeResponse(true);});
+$('discardQuit').addEventListener('click',finishClose);
+$('saveQuit').addEventListener('click',async()=>{for(const f of files.filter(changed))if(!await saveFile(f))return;finishClose();});
 function renderWindowState(state){const expanded=state.maximized||state.fullscreen;const button=$('maximizeWindow');button.innerHTML=icon(expanded?'restore':'maximize');button.title=expanded?'还原':'最大化';button.setAttribute('aria-label',expanded?'还原窗口':'最大化窗口');}
 $('minimizeWindow').addEventListener('click',()=>desktop.minimize().catch(error=>toast(error.message)));
 $('maximizeWindow').addEventListener('click',()=>desktop.toggleMaximize().catch(error=>toast(error.message)));
 $('closeWindow').addEventListener('click',()=>desktop.closeWindow().catch(error=>toast(error.message)));
 desktop.onWindowState(renderWindowState);
-const config=await desktop.config();renderWindowState(config.window);document.body.dataset.platform=config.platform;$('accessibilityButton').hidden=config.platform!=='darwin';
+let config={platform:'unknown'},updateState={phase:'idle'};
+function renderUpdate(state){
+  updateState=state;const busy=['checking','downloading','installing'].includes(state.phase),available=!!state.availableVersion;
+  const messages={idle:'点击检查更新，从 GitHub 获取最新版本。',checking:'正在从 GitHub 检查更新…',current:'当前已是最新版本',available:`发现新版本 v${state.availableVersion}`,downloading:`正在下载 v${state.availableVersion} · ${Math.round(state.progress||0)}%`,downloaded:`v${state.availableVersion} 已下载并通过校验`,installing:'正在安装更新，即将重启…',error:state.error||'检查更新失败，请重试'};
+  $('updateCurrent').textContent=`当前版本 v${state.currentVersion}`;$('updateButton').textContent=available?'有更新':`v${state.currentVersion}`;
+  $('updateStatus').textContent=messages[state.phase]||messages.idle;
+  $('updateHint').textContent=state.supported?'仅手动检查和下载。安装前会检查未保存的修改。':config?.platform==='darwin'?'macOS 当前通过发布页面下载更新。':'开发环境通过发布页面下载安装版。';
+  $('checkUpdate').disabled=busy||state.phase==='downloaded';$('downloadUpdate').hidden=!state.supported||!available||!['available','error'].includes(state.phase);$('downloadUpdate').textContent=state.phase==='error'?'重新下载':'下载更新';
+  $('installUpdate').hidden=state.phase!=='downloaded';$('installUpdate').disabled=busy;$('updateReleasePage').hidden=state.supported||!available;
+  $('updateProgress').hidden=state.phase!=='downloading';$('updateProgress').value=state.progress||0;
+  $('updateNotes').textContent=state.releaseNotes||'';$('updateNotes').hidden=!state.releaseNotes;
+}
+async function checkUpdate(){try{renderUpdate(await desktop.checkUpdate());}catch(error){toast(error.message);}}
+$('updateButton').addEventListener('click',()=>{renderUpdate(updateState);showDialog('updateDialog');checkUpdate();});
+$('checkUpdate').addEventListener('click',checkUpdate);
+$('downloadUpdate').addEventListener('click',async()=>{try{renderUpdate(await desktop.downloadUpdate());}catch(error){toast(error.message);}});
+$('installUpdate').addEventListener('click',()=>desktop.installUpdate().catch(error=>toast(error.message)));
+$('updateReleasePage').addEventListener('click',()=>desktop.openUpdatePage().catch(error=>toast(error.message)));
+desktop.onUpdate(renderUpdate);
+config=await desktop.config();renderWindowState(config.window);document.body.dataset.platform=config.platform;$('accessibilityButton').hidden=config.platform!=='darwin';
+renderUpdate(config.update);files=(config.session?.files||[]).map(file=>buffer(file.name,file.text,file));activeId=config.session?.activeId||files[0]?.id||null;
 if(config.platform==='darwin')document.querySelectorAll('kbd,.rail-shortcuts>span').forEach(el=>el.innerHTML=el.innerHTML.replaceAll('Ctrl','⌘'));
 loadBuffer();
+if(config.session?.failed)toast(`${config.session.failed} 个文件未能重新打开，请检查文件是否已移动或删除`);
+

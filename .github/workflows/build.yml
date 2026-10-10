@@ -51,10 +51,23 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run ${{ matrix.command }}
+      - name: Verify installed Windows upgrade and restart
+        if: runner.os == 'Windows'
+        run: npm run test:update
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Windows'
+        with:
+          name: windows-update-evidence
+          path: test-output/update/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: cmd-send-${{ matrix.artifact }}
-          path: artifacts/*.zip
+          path: |
+            artifacts/*.zip
+            artifacts/*-Setup.exe
+            artifacts/*.blockmap
+            artifacts/latest.yml
           if-no-files-found: error
   release:
     if: needs.version.outputs.publish == 'true'
@@ -76,11 +89,24 @@ jobs:
           APP_VERSION=$(node -p "require('./package.json').version")
           test "$VERSION" = "v$APP_VERSION"
           test -f "release/cmd-send-$APP_VERSION-macOS-arm64.zip"
-          test -f "release/cmd-send-$APP_VERSION-Windows-x64.zip"
+          test -f "release/cmd-send-$APP_VERSION-Windows-x64-Setup.exe"
+          test -f "release/cmd-send-$APP_VERSION-Windows-x64-Setup.exe.blockmap"
+          test -f release/latest.yml
+          # Verify the published updater manifest points at this exact installer.
+          python3 - <<'PY'
+          import base64, hashlib, os
+          from pathlib import Path
+          version = os.environ['VERSION'][1:]
+          name = f'cmd-send-{version}-Windows-x64-Setup.exe'
+          manifest = Path('release/latest.yml').read_text()
+          digest = base64.b64encode(hashlib.sha512(Path('release', name).read_bytes()).digest()).decode()
+          assert f'version: {version}' in manifest and f'url: {name}' in manifest
+          assert f'sha512: {digest}' in manifest
+          PY
           test -f "docs/releases/$VERSION.md"
           git archive --format=zip --prefix=cmd_send/ HEAD -o "release/cmd-send-$APP_VERSION-source.zip"
           cd release
-          sha256sum *.zip > SHA256SUMS.txt
+          sha256sum *.zip *.exe *.blockmap latest.yml > SHA256SUMS.txt
       - name: Publish complete release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -92,6 +118,6 @@ jobs:
             git push origin "refs/tags/$VERSION"
           fi
           gh release create "$VERSION" --verify-tag --draft --title "Cmd Send $VERSION · 命令定向" --notes-file "docs/releases/$VERSION.md"
-          gh release upload "$VERSION" release/*.zip release/SHA256SUMS.txt
+          gh release upload "$VERSION" release/*.zip release/*.exe release/*.blockmap release/latest.yml release/SHA256SUMS.txt
           gh release edit "$VERSION" --draft=false --latest
 
