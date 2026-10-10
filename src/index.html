@@ -16,9 +16,9 @@
   </header>
   <div class="workspace">
     <nav class="scene-sidebar" aria-label="场景目录"><div id="sceneList" class="scene-list"></div><div class="sidebar-note"><span data-icon="list"></span><span>从文本标题生成</span></div></nav>
-    <section class="editor-area" aria-label="命令编辑器">
-      <div id="findBar" class="find-bar" hidden><span data-icon="search"></span><input id="findInput" aria-label="查找文本" placeholder="查找文本…"><span id="findCount" class="find-count">0 / 0</span><button id="findPrevious" class="icon-button" aria-label="上一处匹配" data-icon="up"></button><button id="findNext" class="icon-button" aria-label="下一处匹配" data-icon="down"></button><button id="findClose" class="icon-button" aria-label="关闭查找" data-icon="close"></button></div>
-      <div id="editorScroller" class="editor-scroller"><div id="editorCanvas" class="editor-canvas"><div id="currentLine" class="current-line" aria-hidden="true"></div><pre id="syntaxText" class="syntax-text" aria-hidden="true"></pre><textarea id="editor" class="editor" spellcheck="false" autocapitalize="off" autocorrect="off" wrap="off" aria-label="TXT 命令文本"></textarea></div></div>
+    <section id="editorArea" class="editor-area" aria-label="命令编辑器">
+      <div id="findBar" class="find-bar" hidden><span data-icon="search"></span><input id="findInput" aria-label="查找文本" placeholder="查找文本…"><span id="findCount" class="find-count" role="status" aria-live="polite" aria-atomic="true">0 / 0</span><button id="findPrevious" class="icon-button" aria-label="上一处匹配" title="上一处 · Shift+Enter" data-icon="up" disabled></button><button id="findNext" class="icon-button" aria-label="下一处匹配" title="下一处 · Enter" data-icon="down" disabled></button><button id="findClose" class="icon-button" aria-label="关闭查找" title="关闭 · Esc" data-icon="close"></button></div>
+      <div id="editorScroller" class="editor-scroller"><div id="editorCanvas" class="editor-canvas"><div id="currentLine" class="current-line" aria-hidden="true"></div><div id="findLine" class="find-line" aria-hidden="true" hidden></div><pre id="syntaxText" class="syntax-text" aria-hidden="true"></pre><textarea id="editor" class="editor" spellcheck="false" autocapitalize="off" autocorrect="off" wrap="off" aria-label="TXT 命令文本"></textarea></div></div>
       <div id="emptyState" class="empty-state" hidden><span data-icon="file"></span><h2>未打开文件</h2><p>在顶部文件菜单中打开 TXT 文件</p></div>
       <div id="editorHint" class="editor-hint"><span data-icon="mouse"></span><span>光标所在行，或选中的文字</span><span class="hint-separator">·</span><span>自动忽略标题和注释</span></div>
     </section>

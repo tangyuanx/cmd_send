@@ -38,3 +38,15 @@ body{padding:0;display:block;overflow:hidden;background:var(--surface)}
 .pin-button.is-pinned{background:var(--hover);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
 
 .update-version{cursor:pointer;min-width:54px}.update-version:hover{color:var(--text)}.update-dialog{width:min(480px,calc(100vw - 36px))}.update-body{padding:4px 24px 20px}.update-body>p{margin:10px 0;font-size:13px;line-height:1.65}.update-hint{color:var(--secondary);font-size:12px!important}.update-notes{white-space:pre-wrap;overflow:auto;max-height:200px;font-family:inherit;font-size:12px;line-height:1.7;color:var(--secondary);padding:12px;border:1px solid var(--border);border-radius:6px;margin:16px 0 0}.update-body progress{width:100%;height:6px;accent-color:var(--button);margin:12px 0}.update-actions{justify-content:flex-end;gap:8px}
+
+/* Search stays visible while focus is in the find bar, without covering text. */
+:root{--find-match:#fff0bc;--find-current:#cfe8d7;--find-outline:#477d58;--find-line:#f0f6f2}
+:root[data-theme=dark]{--find-match:#62502c;--find-current:#365d43;--find-outline:#8bbb9a;--find-line:#26332a}
+.find-bar{position:relative;top:auto;right:auto;align-self:flex-end;flex:0 0 auto;margin:14px 20px 8px;box-shadow:none}
+.find-bar input[aria-invalid=true]{color:var(--secondary)}
+.find-count{font-variant-numeric:tabular-nums;min-width:36px;text-align:center}
+.find-match{background:var(--find-match);color:inherit;padding:0;border-radius:2px;box-decoration-break:clone}
+.find-current{background:var(--find-current);outline:2px solid var(--find-outline)}
+.find-line{position:absolute;left:0;right:0;height:var(--lh);background:var(--find-line);box-shadow:inset 3px 0 var(--find-outline);pointer-events:none;z-index:0}
+.has-find-matches .current-line{display:none}
+@media(max-width:600px){.find-bar{top:auto;right:auto;margin:8px 10px 4px;width:calc(100% - 20px);gap:3px;padding-left:7px}.find-count{padding:0;font-size:10px}}

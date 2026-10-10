@@ -50,6 +50,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Verify search rendering and navigation
+        timeout-minutes: 3
+        run: npm run test:search
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: search-evidence-${{ matrix.artifact }}
+          path: test-output/search/
+          if-no-files-found: ignore
       - run: npm run ${{ matrix.command }}
       - name: Verify installed Windows upgrade and restart
         if: runner.os == 'Windows'
