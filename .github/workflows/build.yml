@@ -50,6 +50,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Verify sending modes and settings
+        timeout-minutes: 3
+        run: npm run test:repeat
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repeat-evidence-${{ matrix.artifact }}
+          path: test-output/repeat/
+          if-no-files-found: ignore
       - name: Verify search rendering and navigation
         timeout-minutes: 3
         run: npm run test:search
