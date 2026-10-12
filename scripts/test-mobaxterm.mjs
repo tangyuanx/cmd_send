@@ -67,7 +67,8 @@ try{
   const point={x:Math.round((terminal.rect.left+terminal.rect.right)/2),y:Math.round((terminal.rect.top+terminal.rect.bottom)/2)};
   cursor(point.x,point.y);report.host=host;report.terminal=terminal;report.hit=info(fromPoint(point));
   report.focusBefore={foreground:info(foreground()),global:focus(0),host:focus(host.thread),terminal:focus(terminal.thread),root:info(ancestor(terminalHandle,2))};
-  backend=require('../electron/native/windows.cjs').createBackend();const target=await backend.pick();report.target=target;console.log('TARGET:',JSON.stringify({host,terminal,target,focus:report.focusBefore}));
+  const sessionAddress=require('../electron/native/windows-session-address.cjs').createSessionAddressResolver({onError:e=>console.log('ADDRESS ERROR:',e.message)});
+  backend=require('../electron/native/windows.cjs').createBackend({sessionAddress});const target=await backend.pick();report.target=target;console.log('TARGET:',JSON.stringify({host,terminal,target,focus:report.focusBefore}));
   if(probe){
     try{const context=await backend.prepare(target.id);await backend.character(target.id,'A');await backend.enter(target.id);backend.finish(target.id,context);report.existing='success';}catch(e){report.existing=e.message;}
     report.focusAfter={global:focus(0),host:focus(host.thread),terminal:focus(terminal.thread)};
@@ -132,6 +133,11 @@ try{
       try{report.ps[name]=execFileSync(path.join(bin,name),name==='ps.exe'?['-W','-a']:['ps'],{encoding:'utf8',timeout:5000,windowsHide:true});}catch(e){report.ps[name]=e.message;}
     }
     console.log('OWNERSHIP:',JSON.stringify({processes:report.sshOwnership.processes.filter(p=>/moba|motty|ssh|zsh|bash/i.test(p.Name)),connections:report.sshOwnership.connections,binFiles:report.binFiles,ps:report.ps}));
+    // Only these controlled test terminals contain the fixed dummy commands.
+    report.testTerminalCommands=execFileSync('powershell.exe',['-NoProfile','-Command',`Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${sshOne.terminal.pid},${sshTwo.terminal.pid}) } | Select-Object ProcessId,CommandLine | ConvertTo-Json`],{encoding:'utf8'});
+    report.procMetadata=execFileSync(path.join(bin,'zsh.exe'),['-c',`for d in /proc/[0-9]*; do echo "$d"; cat "$d/stat" "$d/winpid" 2>/dev/null; readlink "$d/fd/0"; done`],{encoding:'utf8',timeout:5000,windowsHide:true});
+    try{report.toyboxPS=execFileSync(path.join(bin,'toybox.exe'),['ps','-A','-o','pid,ppid,tty,comm'],{encoding:'utf8',timeout:5000,windowsHide:true});}catch(e){report.toyboxPS=e.message;}
+    console.log('TEST TERMINALS:',report.testTerminalCommands);console.log('PROC METADATA:',report.procMetadata);console.log('TOYBOX PS:',report.toyboxPS);
     assert.equal(sshOne.target.sessionAddress,firstSSH.address);assert.equal(sshOne.target.sessionPort,firstSSH.port);
     assert.equal(visible(handle(sshOne.terminal.handle)),0);assert.ok(visible(handle(sshTwo.terminal.handle)));
     const boundSSH=sshOne.target,sshContext=await backend.prepare(boundSSH.id);for(const character of 'SSH_BOUND_ONE')await backend.character(boundSSH.id,character);await backend.enter(boundSSH.id);backend.finish(boundSSH.id,sshContext);

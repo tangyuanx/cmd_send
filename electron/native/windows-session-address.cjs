@@ -53,7 +53,7 @@ function sessionEndpoint(root,processes,connections){
   return unique.size===1?[...unique.values()][0]:null;
 }
 
-function createSessionAddressResolver({koffi=require('koffi')}={}){
+function createSessionAddressResolver({koffi=require('koffi'),onError=()=>{}}={}){
   const ip=koffi.load('iphlpapi.dll'),kernel=koffi.load('kernel32.dll');
   const ENTRY=koffi.struct('CmdSessionProcessEntry',{size:'uint32_t',usage:'uint32_t',pid:'uint32_t',heap:'uintptr_t',module:'uint32_t',threads:'uint32_t',parent:'uint32_t',priority:'int32_t',flags:'uint32_t',name:'uint16_t[260]'});
   const table=ip.func('uint32_t __stdcall GetExtendedTcpTable(void *table, _Inout_ uint32_t *size, int order, uint32_t family, uint32_t tableClass, uint32_t reserved)');
@@ -83,7 +83,7 @@ function createSessionAddressResolver({koffi=require('koffi')}={}){
     try{
       const tree=processes(root),result=sessionEndpoint(root,tree,[...connections(2),...connections(23)]);
       return created(root.pid)===root.created?result:null;
-    }catch{return null;} // Missing metadata must not prevent safe native binding.
+    }catch(error){onError(error);return null;} // Missing metadata must not prevent safe native binding.
   };
 }
 module.exports={createSessionAddressResolver,parseTcpTable,sessionEndpoint};
