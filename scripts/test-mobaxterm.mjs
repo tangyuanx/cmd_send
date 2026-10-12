@@ -67,7 +67,7 @@ try{
   const point={x:Math.round((terminal.rect.left+terminal.rect.right)/2),y:Math.round((terminal.rect.top+terminal.rect.bottom)/2)};
   cursor(point.x,point.y);report.host=host;report.terminal=terminal;report.hit=info(fromPoint(point));
   report.focusBefore={foreground:info(foreground()),global:focus(0),host:focus(host.thread),terminal:focus(terminal.thread),root:info(ancestor(terminalHandle,2))};
-  const sessionAddress=require('../electron/native/windows-session-address.cjs').createSessionAddressResolver({onError:e=>console.log('ADDRESS ERROR:',e.message),onDiagnostic:d=>console.log('ADDRESS METADATA:',JSON.stringify(d))});
+  const sessionAddress=require('../electron/native/windows-session-address.cjs').createSessionAddressResolver({onError:e=>console.log('ADDRESS ERROR:',e.message)});
   backend=require('../electron/native/windows.cjs').createBackend({sessionAddress});const target=await backend.pick();report.target=target;console.log('TARGET:',JSON.stringify({host,terminal,target,focus:report.focusBefore}));
   if(probe){
     try{const context=await backend.prepare(target.id);await backend.character(target.id,'A');await backend.enter(target.id);backend.finish(target.id,context);report.existing='success';}catch(e){report.existing=e.message;}
@@ -128,7 +128,7 @@ try{
     assert.equal(sshOne.target.sessionAddress,firstSSH.address);assert.equal(sshOne.target.sessionPort,firstSSH.port);
     assert.equal(visible(handle(sshOne.terminal.handle)),0);assert.ok(visible(handle(sshTwo.terminal.handle)));
     const boundSSH=sshOne.target,sshContext=await backend.prepare(boundSSH.id);for(const character of 'SSH_BOUND_ONE')await backend.character(boundSSH.id,character);await backend.enter(boundSSH.id);backend.finish(boundSSH.id,sshContext);
-    for(let i=0;i<80&&!firstSSH.received.includes('SSH_BOUND_ONE');i++)await delay(50);
+    for(let i=0;i<80&&!firstSSH.received.replaceAll('\r','').includes('SSH_BOUND_ONE\n');i++)await delay(50);
     assert.equal(firstSSH.received.replaceAll('\r',''),'SSH_BOUND_ONE\n');assert.equal(secondSSH.received,'');assert.equal(boundSSH.sessionAddress,firstSSH.address);
     sshTwo.target=await backend.pick();
     assert.equal(sshTwo.target.sessionAddress,secondSSH.address);assert.equal(sshTwo.target.sessionPort,secondSSH.port);assert.notEqual(sshOne.target.sessionKey,sshTwo.target.sessionKey);
