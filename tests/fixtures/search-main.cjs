@@ -5,6 +5,7 @@ app.setPath('userData',fixture.profile);global.searchCaptures={saves:[],plans:[]
 app.whenReady().then(()=>{
  const win=new BrowserWindow({width:1040,height:760,frame:false,webPreferences:{preload:path.join(__dirname,'search-preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false}});
  ipcMain.handle('fixture:config',()=>fixture.config);
+ ipcMain.handle('fixture:pick',()=>fixture.target||{id:'fixture-target',name:'测试目标',title:'Renderer fixture',detail:'仅记录发送请求',strategy:'测试'});
  ipcMain.handle('fixture:save',(_event,id,text)=>{global.searchCaptures.saves.push({id,text});return {};});
  ipcMain.handle('fixture:start',(_event,options)=>{global.searchCaptures.plans.push(options);return {id:'search-run'};});
  ipcMain.handle('fixture:stop',()=>win.webContents.send('fixture:queue',{id:'search-run',type:'stopped',total:0}));

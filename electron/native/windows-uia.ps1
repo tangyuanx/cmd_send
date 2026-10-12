@@ -6,6 +6,37 @@ Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName WindowsBase
 $targets = @{}
 function Runtime-Key($element) { return ($element.GetRuntimeId() -join ':') }
+function In-Root($element, $rootRuntime) {
+    for ($depth = 0; $null -ne $element -and $depth -lt 48; $depth++) {
+        if ((Runtime-Key $element) -eq $rootRuntime) { return $true }
+        $element = [System.Windows.Automation.TreeWalker]::RawViewWalker.GetParent($element)
+    }
+    return $false
+}
+function Checked-Session($targetId, $select = $false) {
+    if (-not $targets.ContainsKey($targetId)) { throw '目标输入区已失效，请重新绑定' }
+    $target = $targets[$targetId]
+    if ($null -ne $target.root -and (($target.root.Current.ProcessId -ne $target.hostProcessId) -or (Runtime-Key $target.root) -ne $target.rootRuntime)) { throw '目标会话窗口已关闭或被替换，请重新绑定' }
+    foreach ($tab in $target.tabs) {
+        if ($tab.element.Current.ProcessId -ne $tab.processId -or (Runtime-Key $tab.element) -ne $tab.runtime -or -not $tab.element.Current.IsEnabled -or -not (In-Root $tab.element $target.rootRuntime)) { throw '绑定的会话已关闭或被替换，请重新绑定' }
+        $pattern = $null
+        if (-not $tab.element.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern)) { throw '无法验证绑定的会话，请重新绑定' }
+        if (-not $pattern.Current.IsSelected -and $select) { $pattern.Select() }
+        if (-not $pattern.Current.IsSelected) { throw '会话已切换，已停止投递' }
+    }
+    return $target
+}
+function Session-Tabs($root) {
+    if ($null -eq $root) { return }
+    $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem)
+    $items = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    foreach ($item in $items) {
+        $pattern = $null
+        if ($item.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern) -and $pattern.Current.IsSelected) {
+            @{ element = $item; runtime = (Runtime-Key $item); processId = $item.Current.ProcessId; name = $item.Current.Name }
+        }
+    }
+}
 function Checked-Element($targetId) {
     if (-not $targets.ContainsKey($targetId)) { throw '目标输入区已失效，请重新绑定' }
     $target = $targets[$targetId]
@@ -46,23 +77,31 @@ while ($null -ne ($line = [Console]::ReadLine())) {
                     }
                     $element = [System.Windows.Automation.TreeWalker]::RawViewWalker.GetParent($element)
                 }
-                if ($null -eq $found) { $result = @{ supported = $false }; break }
+                $root = $null
+                if ($request.window) { $root = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]::new([long]$request.window)) }
+                $tabs = @(Session-Tabs $root)
+                if ($null -eq $found -and $tabs.Count -eq 0) { $result = @{ supported = $false }; break }
                 $targetId = [guid]::NewGuid().ToString()
-                $runtime = Runtime-Key $found
-                $targets[$targetId] = @{ element = $found; processId = [int]$request.processId; runtime = $runtime }
-                $result = @{ targetId = $targetId; detail = $found.Current.LocalizedControlType }
+                $runtime = if ($null -ne $found) { Runtime-Key $found } else { '' }
+                $rootRuntime = if ($null -ne $root) { Runtime-Key $root } else { '' }
+                $targets[$targetId] = @{ element = $found; processId = [int]$request.processId; runtime = $runtime; root = $root; rootRuntime = $rootRuntime; hostProcessId = [int]$request.hostProcessId; tabs = $tabs }
+                $detail = if ($null -ne $found) { $found.Current.LocalizedControlType } else { '会话输入区' }
+                $result = @{ targetId = $targetId; detail = $detail; sessionBound = ($tabs.Count -gt 0); sessionName = (($tabs | ForEach-Object { $_.name }) -join ' / '); requiresNativeFocus = ($null -eq $found) }
             }
             'focus' {
-                $element = Checked-Element $request.targetId
-                $element.SetFocus()
+                $target = Checked-Session $request.targetId $true
+                if ($null -ne $target.element) { $element = Checked-Element $request.targetId; $element.SetFocus() }
                 $result = $true
             }
             'commit' {
-                $null = Checked-Element $request.targetId
+                $target = Checked-Session $request.targetId
+                if ($null -ne $target.element) { $null = Checked-Element $request.targetId }
                 foreach ($key in @($targets.Keys)) { if ($key -ne $request.targetId) { $targets.Remove($key) } }
                 $result = $true
             }
             'verify' {
+                $target = Checked-Session $request.targetId
+                if ($null -eq $target.element) { $result = $true; break }
                 $element = Checked-Element $request.targetId
                 $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
                 if ($null -eq $focused -or (Runtime-Key $focused) -ne (Runtime-Key $element)) { throw '目标输入区的焦点已改变，已停止投递' }
