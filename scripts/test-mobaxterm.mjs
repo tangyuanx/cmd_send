@@ -1,10 +1,11 @@
-// Real MobaXterm Home Edition; test traffic stays in its local cat process.
+// Real MobaXterm Home Edition; all traffic stays in controlled local receivers.
 // Its official portable download is kept in a temporary directory, never redistributed.
 import assert from 'node:assert/strict';import fs from 'node:fs/promises';
-import path from 'node:path';import os from 'node:os';import {createHash} from 'node:crypto';
+import path from 'node:path';import os from 'node:os';import {createHash,generateKeyPairSync} from 'node:crypto';
 import {spawn,execFileSync} from 'node:child_process';import {setTimeout as delay} from 'node:timers/promises';
 import {createInterface} from 'node:readline';
 import {createRequire} from 'node:module';
+import ssh2 from 'ssh2';
 const require=createRequire(import.meta.url),koffi=require('koffi');
 if(process.platform!=='win32')throw new Error('MobaXterm integration test requires Windows');
 const probe=process.env.CMD_SEND_MOBAX_PROBE==='1';
@@ -31,7 +32,21 @@ function handle(value){return BigInt(value);}
 async function screen(name){const file=path.join(evidence,name).replaceAll("'","''");execFileSync('powershell.exe',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $r=[Windows.Forms.SystemInformation]::VirtualScreen; $b=New-Object Drawing.Bitmap($r.Width,$r.Height); $g=[Drawing.Graphics]::FromImage($b); $g.CopyFromScreen($r.Left,$r.Top,0,0,$b.Size); $b.Save('${file}'); $g.Dispose(); $b.Dispose()`]);}
 async function read(){try{return await fs.readFile(output,'utf8');}catch{return '';}}
 function message(h,msg,wp,lp=1){const result=[0];assert.ok(post(h,msg,wp,lp,0x22,1000,result),`Message ${msg} failed`);}
-let child,tabLauncher,otherChild,backend;
+let child,tabLauncher,otherChild,backend;const sshFixtures=[],sshLaunchers=[];
+async function sshReceiver(address){
+  const key=generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({type:'pkcs1',format:'pem'});
+  const fixture={address,received:'',ready:false,clients:[],errors:[]};
+  const server=new ssh2.Server({hostKeys:[key]},client=>{
+    fixture.clients.push(client);client.on('error',e=>fixture.errors.push(e.message));
+    client.on('authentication',ctx=>ctx.accept());
+    client.on('ready',()=>client.on('session',accept=>{
+      const session=accept();session.on('pty',accept=>accept());
+      session.on('shell',accept=>{const stream=accept();fixture.ready=true;stream.on('data',bytes=>{fixture.received+=bytes.toString('utf8');});stream.write('LOCAL SSH FIXTURE\r\n');});
+    }));
+  });
+  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,address,resolve);});
+  fixture.server=server;fixture.port=server.address().port;sshFixtures.push(fixture);return fixture;
+}
 try{
   const response=await fetch('https://download.mobatek.net/2652026082870834/MobaXterm_Portable_v26.5.zip');assert.ok(response.ok);
   const bytes=Buffer.from(await response.arrayBuffer());assert.equal(createHash('sha256').update(bytes).digest('hex'),'a26e7e4e2f7bd47a13fbc6d93d08a2d946f21c3e0d135b9e4f55149842c09ef6');
@@ -52,7 +67,8 @@ try{
   const point={x:Math.round((terminal.rect.left+terminal.rect.right)/2),y:Math.round((terminal.rect.top+terminal.rect.bottom)/2)};
   cursor(point.x,point.y);report.host=host;report.terminal=terminal;report.hit=info(fromPoint(point));
   report.focusBefore={foreground:info(foreground()),global:focus(0),host:focus(host.thread),terminal:focus(terminal.thread),root:info(ancestor(terminalHandle,2))};
-  backend=require('../electron/native/windows.cjs').createBackend();const target=await backend.pick();report.target=target;console.log('TARGET:',JSON.stringify({host,terminal,target,focus:report.focusBefore}));
+  const sessionAddress=require('../electron/native/windows-session-address.cjs').createSessionAddressResolver({onError:e=>console.log('ADDRESS ERROR:',e.message)});
+  backend=require('../electron/native/windows.cjs').createBackend({sessionAddress});const target=await backend.pick();report.target=target;console.log('TARGET:',JSON.stringify({host,terminal,target,focus:report.focusBefore}));
   if(probe){
     try{const context=await backend.prepare(target.id);await backend.character(target.id,'A');await backend.enter(target.id);backend.finish(target.id,context);report.existing='success';}catch(e){report.existing=e.message;}
     report.focusAfter={global:focus(0),host:focus(host.thread),terminal:focus(terminal.thread)};
@@ -93,6 +109,31 @@ try{
     assert.equal(await fs.readFile(secondOutput,'utf8'),'');assert.ok(windows(hostHandle).some(w=>w.handle===second.handle),'the other session remains open');
     report.closedTargetRejected=true;
     console.log('PASS: closing only the bound session rejects delivery while the other session remains open, with no retargeting');
+    assert.equal(target.sessionAddress,undefined,'a local cat tab must not borrow an address from another session');
+    const firstSSH=await sshReceiver('127.0.0.2'),secondSSH=await sshReceiver('127.0.0.3');
+    async function openSSH(fixture,bind=true){
+      const previous=new Set(windows(hostHandle).map(w=>w.handle));
+      sshLaunchers.push(spawn(path.join(temp,exe),['-newtab',`ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PreferredAuthentications=none -p ${fixture.port} fixture@${fixture.address}`],{stdio:'ignore'}));
+      let selected;
+      for(let i=0;i<300;i++){
+        selected=windows(hostHandle).find(w=>!previous.has(w.handle)&&/MoTTY/i.test(w.name)&&w.visible&&w.rect.right-w.rect.left>200);
+        if(selected&&fixture.ready)break;await delay(200);
+      }
+      assert.ok(selected,'SSH tab must have its own MoTTY terminal');assert.equal(fixture.ready,true,JSON.stringify({address:fixture.address,errors:fixture.errors}));
+      activate(hostHandle);await delay(200);cursor(Math.round((selected.rect.left+selected.rect.right)/2),Math.round((selected.rect.top+selected.rect.bottom)/2));
+      return {terminal:selected,target:bind?await backend.pick():null};
+    }
+    const sshOne=await openSSH(firstSSH),sshTwo=await openSSH(secondSSH,false);
+    report.sshTargets=[sshOne,sshTwo];console.log('SSH TARGETS:',JSON.stringify(report.sshTargets));
+    assert.equal(sshOne.target.sessionAddress,firstSSH.address);assert.equal(sshOne.target.sessionPort,firstSSH.port);
+    assert.equal(visible(handle(sshOne.terminal.handle)),0);assert.ok(visible(handle(sshTwo.terminal.handle)));
+    const boundSSH=sshOne.target,sshContext=await backend.prepare(boundSSH.id);for(const character of 'SSH_BOUND_ONE')await backend.character(boundSSH.id,character);await backend.enter(boundSSH.id);backend.finish(boundSSH.id,sshContext);
+    for(let i=0;i<80&&!firstSSH.received.includes('SSH_BOUND_ONE');i++)await delay(50);
+    assert.equal(firstSSH.received.replaceAll('\r','').replaceAll('\n',''),'SSH_BOUND_ONE');assert.equal(secondSSH.received,'');assert.equal(boundSSH.sessionAddress,firstSSH.address);
+    sshTwo.target=await backend.pick();
+    assert.equal(sshTwo.target.sessionAddress,secondSSH.address);assert.equal(sshTwo.target.sessionPort,secondSSH.port);assert.notEqual(sshOne.target.sessionKey,sshTwo.target.sessionKey);
+    report.sshReceived=sshFixtures.map(f=>({address:f.address,port:f.port,received:f.received,errors:f.errors}));await screen('ssh-session-ip.png');
+    console.log('PASS: two real SSH tabs display their own IP/port; switching tabs leaves the original address and exact input destination fixed');
   }
   if(probe)await screen('terminal.png');console.log('RECEIVED:',JSON.stringify(await read()));
 }catch(error){report.error=error.stack;await screen('failure.png').catch(()=>{});throw error;}
@@ -101,5 +142,7 @@ finally{
   if(child?.pid)try{execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore'});}catch{}
   if(tabLauncher?.pid)try{execFileSync('taskkill',['/PID',String(tabLauncher.pid),'/T','/F'],{stdio:'ignore'});}catch{}
   if(otherChild?.pid)try{execFileSync('taskkill',['/PID',String(otherChild.pid),'/T','/F'],{stdio:'ignore'});}catch{}
+  for(const launcher of sshLaunchers)if(launcher.pid)try{execFileSync('taskkill',['/PID',String(launcher.pid),'/T','/F'],{stdio:'ignore'});}catch{}
+  for(const fixture of sshFixtures){for(const client of fixture.clients)client.end();fixture.server.close();}
   await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});
 }

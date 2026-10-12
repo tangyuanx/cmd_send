@@ -2,7 +2,7 @@
 const {AutomationWorker}=require('./windows-uia.cjs');
 const {randomUUID}=require('node:crypto');
 const {setTimeout:delay}=require('node:timers/promises');
-function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sleep=delay}={}){
+function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sleep=delay,sessionAddress=null}={}){
   const user=koffi.load('user32.dll'),kernel=koffi.load('kernel32.dll');
   const POINT=koffi.struct('CmdWinPoint',{x:'int32_t',y:'int32_t'});
   const RECT=koffi.struct('CmdWinRect',{left:'int32_t',top:'int32_t',right:'int32_t',bottom:'int32_t'});
@@ -24,7 +24,7 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
   const pointer=p=>p==null?'0':String(koffi.address(p));
   function pidOf(window){const out=[0],thread=api.pid(window,out);return {pid:out[0],thread};}
   function text(window,fn){const buf=Buffer.alloc(2048);const length=fn(window,buf,1024);return buf.subarray(0,Math.max(0,length)*2).toString('utf16le');}
-  function identity(pid){const h=api.open(0x1000,0,pid);if(!h)throw new Error('无法读取目标进程，可能需要同等权限启动');try{const created=[0n],exit=[0n],kernelTime=[0n],userTime=[0n];if(!api.times(h,created,exit,kernelTime,userTime))throw new Error('目标进程已失效');const buffer=Buffer.alloc(65536),size=[32768];const hasPath=api.path(h,0,buffer,size);return {created:String(created[0]),name:hasPath?buffer.subarray(0,size[0]*2).toString('utf16le').split('\\').pop().replace(/\.exe$/i,''):`进程 ${pid}`};}finally{api.close(h);}}
+  function identity(pid){const h=api.open(0x1000,0,pid);if(!h)throw new Error('无法读取目标进程，可能需要同等权限启动');try{const created=[0n],exit=[0n],kernelTime=[0n],userTime=[0n];if(!api.times(h,created,exit,kernelTime,userTime))throw new Error('目标进程已失效');const buffer=Buffer.alloc(65536),size=[32768];const hasPath=api.path(h,0,buffer,size);return {image:hasPath?buffer.subarray(0,size[0]*2).toString('utf16le'):null,created:String(created[0]),name:hasPath?buffer.subarray(0,size[0]*2).toString('utf16le').split('\\').pop().replace(/\.exe$/i,''):`进程 ${pid}`};}finally{api.close(h);}}
   function validate(id){
     const t=targets.get(id);if(!t)throw new Error('目标绑定已失效');const current=pidOf(t.element),host=pidOf(t.window);
     if(!api.valid(t.element)||!api.valid(t.window)||!api.enabled(t.element)||current.pid!==t.pid||current.thread!==t.thread||identity(t.pid).created!==t.created||text(t.element,api.className)!==t.className||!same(api.ancestor(t.element,2),t.window)||host.pid!==t.host.pid||host.thread!==t.host.thread||identity(host.pid).created!==t.host.created||text(t.window,api.className)!==t.host.className)throw new Error('目标窗口已关闭或被替换，请重新绑定');
@@ -101,7 +101,12 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
     try{validate(id);if(automation)await worker.call('commit',{targetId:automation.targetId});}catch(error){targets.delete(id);throw error;}
     for(const key of targets.keys())if(key!==id)targets.delete(key);
     const title=text(window,api.title),sessionName=automation?.sessionName||text(element,api.title)||title||'未命名输入区',sessionKey=`PID ${pid} · 输入区 ${pointer(element)}`;
-    return {id,name:displayName(hostInfo.name),title,sessionName,sessionKey,detail:terminal?`${className} · ${processInfo.name}`:automation?.detail||className,strategy:terminal?'后台终端输入':background?'后台文本输入':automation?.sessionBound?'固定页签聚焦输入':automation?'具体控件聚焦输入':'所选区域聚焦输入',verified:false};
+    let endpoint=null;
+    if(terminal&&/^MobaXterm(?:_|$)/i.test(hostInfo.name)){
+      try{sessionAddress??=require('./windows-session-address.cjs').createSessionAddressResolver({koffi});endpoint=await sessionAddress({pid,created:processInfo.created,image:processInfo.image});}catch{ /* Optional display metadata. */ }
+      validate(id);
+    }
+    return {id,name:displayName(hostInfo.name),title,sessionName,sessionKey,...(endpoint?{sessionAddress:endpoint.address,sessionPort:endpoint.port}:{}),detail:terminal?`${className} · ${processInfo.name}`:automation?.detail||className,strategy:terminal?'后台终端输入':background?'后台文本输入':automation?.sessionBound?'固定页签聚焦输入':automation?'具体控件聚焦输入':'所选区域聚焦输入',verified:false};
   }
   function unicode(char,key=0){const units=char?Array.from({length:char.length},(_,i)=>char.charCodeAt(i)):[null];for(const unit of units){const bytes=Buffer.alloc(80);for(let i=0;i<2;i++){const offset=i*40;bytes.writeUInt32LE(1,offset);bytes.writeUInt16LE(unit===null?key:0,offset+8);bytes.writeUInt16LE(unit===null?0:unit,offset+10);bytes.writeUInt32LE((unit===null?0:4)+(i===1?2:0),offset+12);}const sent=api.input(2,bytes,40);if(sent!==2)throw new Error('投递未完成，可能存在权限限制；已停止且不会自动重试');}}
   function modifiers(){return [16,17,18,91,92].some(key=>(api.key(key)&0x8000)!==0);}
