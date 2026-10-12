@@ -67,7 +67,7 @@ try{
   const point={x:Math.round((terminal.rect.left+terminal.rect.right)/2),y:Math.round((terminal.rect.top+terminal.rect.bottom)/2)};
   cursor(point.x,point.y);report.host=host;report.terminal=terminal;report.hit=info(fromPoint(point));
   report.focusBefore={foreground:info(foreground()),global:focus(0),host:focus(host.thread),terminal:focus(terminal.thread),root:info(ancestor(terminalHandle,2))};
-  const sessionAddress=require('../electron/native/windows-session-address.cjs').createSessionAddressResolver({onError:e=>console.log('ADDRESS ERROR:',e.message)});
+  const sessionAddress=require('../electron/native/windows-session-address.cjs').createSessionAddressResolver({onError:e=>console.log('ADDRESS ERROR:',e.message),onDiagnostic:d=>console.log('ADDRESS METADATA:',JSON.stringify(d))});
   backend=require('../electron/native/windows.cjs').createBackend({sessionAddress});const target=await backend.pick();report.target=target;console.log('TARGET:',JSON.stringify({host,terminal,target,focus:report.focusBefore}));
   if(probe){
     try{const context=await backend.prepare(target.id);await backend.character(target.id,'A');await backend.enter(target.id);backend.finish(target.id,context);report.existing='success';}catch(e){report.existing=e.message;}

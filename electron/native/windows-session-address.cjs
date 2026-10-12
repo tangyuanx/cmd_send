@@ -71,7 +71,7 @@ function cygwinClients(processes,ownsPipe){
   return processes.filter(p=>descendants.has(p.pid)&&/^_?(?:ssh|telnet|rlogin|plink|mosh-client)$/.test(p.name)).map(p=>p.winpid);
 }
 
-function createSessionAddressResolver({koffi=require('koffi'),onError=()=>{}}={}){
+function createSessionAddressResolver({koffi=require('koffi'),onError=()=>{},onDiagnostic=()=>{}}={}){
   const ip=koffi.load('iphlpapi.dll'),kernel=koffi.load('kernel32.dll');
   const ENTRY=koffi.struct('CmdSessionProcessEntry',{size:'uint32_t',usage:'uint32_t',pid:'uint32_t',heap:'uintptr_t',module:'uint32_t',threads:'uint32_t',parent:'uint32_t',priority:'int32_t',flags:'uint32_t',name:'uint16_t[260]'});
   const table=ip.func('uint32_t __stdcall GetExtendedTcpTable(void *table, _Inout_ uint32_t *size, int order, uint32_t family, uint32_t tableClass, uint32_t reserved)');
@@ -117,9 +117,9 @@ function createSessionAddressResolver({koffi=require('koffi'),onError=()=>{}}={}
       function pointerAt(address){const b=Buffer.alloc(width),n=[0];if(!read(h,address,b,width,n)||Number(n[0])!==width)throw new Error('Missing process handle metadata');return width===8?b.readBigUInt64LE():BigInt(b.readUInt32LE());}
       const parameters=pointerAt(peb+BigInt(parameterOffset));if(!parameters)return false;
       const stdin=pointerAt(parameters+BigInt(inputOffset));if(!stdin)return false;
-      const out=[null];if(!duplicate(h,stdin,current(),out,0,0,2))return false;copy=out[0];
-      const server=[0];return !!pipeServer(copy,server)&&server[0]===root.pid&&created(pid)===birth;
-    }catch{return false;}finally{if(copy)close(copy);close(h);}
+      const out=[null];if(!duplicate(h,stdin,current(),out,0,0,2)){onDiagnostic({stage:'duplicate',pid});return false;}copy=out[0];
+      const server=[0],ok=pipeServer(copy,server);onDiagnostic({stage:'pipe',pid,root:root.pid,ok,server:server[0]});return !!ok&&server[0]===root.pid&&created(pid)===birth;
+    }catch(error){onDiagnostic({stage:'pipe-error',pid,error:error.message});return false;}finally{if(copy)close(copy);close(h);}
   }
   return async root=>{
     try{
@@ -130,7 +130,7 @@ function createSessionAddressResolver({koffi=require('koffi'),onError=()=>{}}={}
         // cygtermd stdin pipe identifies the exact MoTTY, including hidden tabs.
         const script='for d in /proc/[0-9]*; do IFS= read -r s < "$d/stat" || continue; IFS= read -r w < "$d/winpid" || continue; print -r -- "$w|$s"; done; true';
         const {stdout}=await runFile(path.join(path.dirname(root.image),'zsh.exe'),['-f','-c',script],{windowsHide:true,timeout:2500,maxBuffer:256*1024});
-        const clients=cygwinClients(parseCygwinProcesses(stdout),pid=>pipeOwner(pid,root));
+        const parsed=parseCygwinProcesses(stdout);onDiagnostic({stage:'processes',processes:parsed});const clients=cygwinClients(parsed,pid=>pipeOwner(pid,root));onDiagnostic({stage:'clients',clients});
         const identities=new Map(clients.filter(pid=>sameRuntime(pid,root)).map(pid=>[pid,created(pid)]));
         const peers=[...connections(2),...connections(23)].filter(c=>identities.get(c.pid)&&BigInt(identities.get(c.pid))>=BigInt(root.created)&&created(c.pid)===identities.get(c.pid));
         const unique=new Map(peers.map(c=>[`${c.address}:${c.port}`,{address:c.address,port:c.port}]));
