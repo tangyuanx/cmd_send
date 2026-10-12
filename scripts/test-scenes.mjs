@@ -17,14 +17,14 @@ async function cursor(){return page.locator('#editor').evaluate(el=>el.selection
 try{
  application=await electron.launch({args:[path.join(root,'tests','fixtures','search-main.cjs')],env,timeout:60000});page=await application.firstWindow();page.on('pageerror',e=>errors.push(e.message));
  await page.waitForFunction(()=>document.querySelectorAll('.scene-button').length===5);
- assert.deepEqual(await page.locator('.scene-name').allTextContents(),['串口','网络','空场景','版本','串口']);
+ assert.deepEqual(await page.locator('.scene-name').allTextContents(),['[串口]','[网络]','[空场景]','[版本]','[串口]']);
  assert.equal(await page.locator('.section-line').count(),5);
  await page.locator('.scene-button').nth(1).click();assert.equal(await cursor(),text.indexOf('echo second'));
  await page.locator('.scene-button').nth(2).click();assert.equal(await cursor(),text.indexOf('【空场景】'),'empty scene cannot jump into the next scene');
  await page.locator('.scene-button').nth(4).click();assert.equal(await cursor(),text.indexOf('echo last'));
  assert.equal(await page.locator('.scene-button[aria-current="location"]').count(),1);passed('all bracket formats render, highlight, navigate and distinguish repeated headings');
  await page.locator('#fileButton').click();await page.locator('[data-file="plain"]').click();assert.equal(await page.locator('.scene-button').count(),0);assert.equal(await page.locator('#sceneEmpty').isVisible(),true);
- await page.locator('#editor').fill('【新场景】\necho new');assert.equal(await page.locator('.scene-name').textContent(),'新场景');assert.equal(await page.locator('#sceneEmpty').isHidden(),true);
+ await page.locator('#editor').fill('【新场景】\necho new');assert.equal(await page.locator('.scene-name').textContent(),'[新场景]');assert.equal(await page.locator('#sceneEmpty').isHidden(),true);
  await page.locator('#fileButton').click();await page.locator('[data-file="scenes"]').click();assert.equal(await page.locator('.scene-button').count(),5);passed('no-heading files show the required format; edits and file switches rebuild the directory');
  await page.locator('#targetButton').dispatchEvent('pointerdown',{button:0});await page.waitForFunction(()=>document.getElementById('targetLabel').textContent==='MobaXterm');
  assert.equal(await page.locator('#targetSession').textContent(),'会话一 · UART 调试 · PID 123 · 输入区 456');
