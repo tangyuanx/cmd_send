@@ -125,21 +125,29 @@ try{
     }
     const sshOne=await openSSH(firstSSH),sshTwo=await openSSH(secondSSH,false);
     report.sshTargets=[sshOne,sshTwo];console.log('SSH TARGETS:',JSON.stringify(report.sshTargets));
-    // Metadata only, for diagnosing process ownership without collecting commands.
-    report.sshOwnership=JSON.parse(execFileSync('powershell.exe',['-NoProfile','-Command',`$p=Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name; $c=Get-NetTCPConnection | Where-Object { $_.RemotePort -in @(${firstSSH.port},${secondSSH.port}) } | Select-Object OwningProcess,RemoteAddress,RemotePort,State; @{ processes=@($p); connections=@($c) } | ConvertTo-Json -Depth 4`],{encoding:'utf8'}).replace(/^\uFEFF/,''));
-    const bin=path.dirname(sshOne.terminal.name);report.binFiles=await fs.readdir(bin);report.ps={};
-    for(const name of ['ps.exe','busybox.exe']){
-      if(!report.binFiles.includes(name))continue;
-      try{report.ps[name]=execFileSync(path.join(bin,name),name==='ps.exe'?['-W','-a']:['ps'],{encoding:'utf8',timeout:5000,windowsHide:true});}catch(e){report.ps[name]=e.message;}
+    // Read only whitelisted connection metadata from these two controlled
+    // fixture sessions. Never collect command lines, registry, or full configs.
+    const namesText=execFileSync('powershell.exe',['-NoProfile','-Command',`Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${sshOne.terminal.pid},${sshTwo.terminal.pid}) } | ForEach-Object { if($_.CommandLine -match '-load\\s+"(TERM[0-9]+)"') { $Matches[1] } }`],{encoding:'utf8'});
+    const sessionNames=namesText.trim().split(/\s+/).filter(n=>/^TERM[0-9]+$/.test(n));report.sessionMetadata=[];
+    const bin=path.dirname(sshOne.terminal.name);
+    async function scan(directory,depth=0){
+      for(const entry of await fs.readdir(directory,{withFileTypes:true}).catch(()=>[])){
+        const file=path.join(directory,entry.name);
+        if(entry.isDirectory()&&depth<5)await scan(file,depth+1);
+        else if(entry.isFile()&&sessionNames.includes(entry.name)){
+          if((await fs.stat(file)).size>1024*1024)continue;
+          const settings=await fs.readFile(file,'utf8'),fields={};
+          for(const line of settings.split(/\r?\n/)){
+            const match=line.match(/^([^\\]+)\\([^\\]*)\\$/);
+            if(match&&/^(HostName|PortNumber|Protocol|MobaParentWnd|MobaTermNum)$/.test(match[1]))fields[match[1]]=match[2];
+          }
+          report.sessionMetadata.push({name:entry.name,relative:path.relative(path.resolve(bin,'../..'),file),fields,fieldNames:settings.split(/\r?\n/).map(line=>line.split('\\')[0])});
+        }
+      }
     }
-    console.log('OWNERSHIP:',JSON.stringify({processes:report.sshOwnership.processes.filter(p=>/moba|motty|ssh|zsh|bash/i.test(p.Name)),connections:report.sshOwnership.connections,binFiles:report.binFiles,ps:report.ps}));
-    // Only these controlled test terminals contain the fixed dummy commands.
-    report.testTerminalCommands=execFileSync('powershell.exe',['-NoProfile','-Command',`Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${sshOne.terminal.pid},${sshTwo.terminal.pid}) } | Select-Object ProcessId,CommandLine | ConvertTo-Json`],{encoding:'utf8'});
-    try{report.procMetadata=execFileSync(path.join(bin,'zsh.exe'),['-f','-c',`for d in /proc/[0-9]*; do echo "$d"; IFS= read -r v < "$d/stat"; echo "$v"; IFS= read -r v < "$d/winpid"; echo "$v"; /bin/toybox.exe readlink "$d/fd/0"; done; true`],{encoding:'utf8',timeout:5000,windowsHide:true});}catch(e){report.procMetadata=e.stdout||e.message;}
-    try{report.toyboxPS=execFileSync(path.join(bin,'toybox.exe'),['ps','-A','-o','pid,ppid,tty,comm'],{encoding:'utf8',timeout:5000,windowsHide:true});}catch(e){report.toyboxPS=e.message;}
-    console.log('TEST TERMINALS:',report.testTerminalCommands);console.log('PROC METADATA:',report.procMetadata);console.log('TOYBOX PS:',report.toyboxPS);
-    report.sessionRegistry=execFileSync('powershell.exe',['-NoProfile','-Command',`$keys=Get-ChildItem 'HKCU:\\Software\\SimonTatham','HKCU:\\Software\\Mobatek' -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'TERM${host.handle}*' }; $keys | ForEach-Object { $key=$_; $values=@{}; foreach($n in $key.GetValueNames()){ if($n -match '^(HostName|PortNumber|Protocol|Cyg.*|.*Session.*|.*Process.*|.*TTY.*)$'){$values[$n]=$key.GetValue($n)} }; @{path=$key.Name;names=$key.GetValueNames();values=$values} } | ConvertTo-Json -Depth 4`],{encoding:'utf8',timeout:10000});
-    console.log('SESSION REGISTRY:',report.sessionRegistry);
+    await scan(path.resolve(bin,'../..'));await scan(temp);
+    for(const name of sessionNames){const file=path.join(process.cwd(),name);if(await fs.stat(file).then(s=>s.isFile(),()=>false))await scan(process.cwd(),5);}
+    console.log('FIXTURE CONNECTION METADATA:',JSON.stringify(report.sessionMetadata));
     assert.equal(sshOne.target.sessionAddress,firstSSH.address);assert.equal(sshOne.target.sessionPort,firstSSH.port);
     assert.equal(visible(handle(sshOne.terminal.handle)),0);assert.ok(visible(handle(sshTwo.terminal.handle)));
     const boundSSH=sshOne.target,sshContext=await backend.prepare(boundSSH.id);for(const character of 'SSH_BOUND_ONE')await backend.character(boundSSH.id,character);await backend.enter(boundSSH.id);backend.finish(boundSSH.id,sshContext);
