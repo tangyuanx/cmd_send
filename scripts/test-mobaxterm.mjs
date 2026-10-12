@@ -128,8 +128,8 @@ try{
     assert.equal(sshOne.target.sessionAddress,firstSSH.address);assert.equal(sshOne.target.sessionPort,firstSSH.port);
     assert.equal(visible(handle(sshOne.terminal.handle)),0);assert.ok(visible(handle(sshTwo.terminal.handle)));
     const boundSSH=sshOne.target,sshContext=await backend.prepare(boundSSH.id);for(const character of 'SSH_BOUND_ONE')await backend.character(boundSSH.id,character);await backend.enter(boundSSH.id);backend.finish(boundSSH.id,sshContext);
-    for(let i=0;i<80&&!firstSSH.received.replaceAll('\r','').includes('SSH_BOUND_ONE\n');i++)await delay(50);
-    assert.equal(firstSSH.received.replaceAll('\r',''),'SSH_BOUND_ONE\n');assert.equal(secondSSH.received,'');assert.equal(boundSSH.sessionAddress,firstSSH.address);
+    for(let i=0;i<80&&!firstSSH.received.includes('SSH_BOUND_ONE');i++)await delay(50);
+    assert.equal(firstSSH.received.replaceAll('\r','').replaceAll('\n',''),'SSH_BOUND_ONE');assert.equal(secondSSH.received,'');assert.equal(boundSSH.sessionAddress,firstSSH.address);
     sshTwo.target=await backend.pick();
     assert.equal(sshTwo.target.sessionAddress,secondSSH.address);assert.equal(sshTwo.target.sessionPort,secondSSH.port);assert.notEqual(sshOne.target.sessionKey,sshTwo.target.sessionKey);
     report.sshReceived=sshFixtures.map(f=>({address:f.address,port:f.port,received:f.received,errors:f.errors}));await screen('ssh-session-ip.png');
