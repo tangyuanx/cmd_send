@@ -28,6 +28,7 @@ async function currentVisible(index,count){
 try{
  application=await electron.launch({args:[path.join(root,'tests','fixtures','search-main.cjs')],env,timeout:60000});
  page=await application.firstWindow();page.on('pageerror',e=>errors.push(e.message));
+ await page.locator('#editor').waitFor({state:'attached'});
  await page.waitForFunction(()=>document.getElementById('editor').value.includes('routine 119'));
  await page.evaluate(()=>{
   window.searchEvents=[];

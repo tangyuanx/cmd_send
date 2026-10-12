@@ -15,6 +15,7 @@ try{
   const env={...process.env,CMD_SEND_SEARCH_FIXTURE:JSON.stringify({profile:path.join(temp,'profile'),page:path.join(root,'src','index.html'),config})};delete env.ELECTRON_RUN_AS_NODE;
   app=await electron.launch({args:[path.join(root,'tests','fixtures','search-main.cjs')],env,timeout:60000});
   page=await app.firstWindow();page.on('pageerror',error=>errors.push(error.message));
+ await page.locator('#editor').waitFor({state:'attached'});
  await page.waitForFunction(()=>document.getElementById('editor').value.includes('echo C'));
  const plans=()=>app.evaluate(()=>global.searchCaptures.plans);
  const emit=event=>app.evaluate(({BrowserWindow},event)=>BrowserWindow.getAllWindows()[0].webContents.send('fixture:queue',event),event);
