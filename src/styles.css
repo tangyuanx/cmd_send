@@ -54,7 +54,7 @@ body{padding:0;display:block;overflow:hidden;background:var(--surface)}
 /* Approved clarity preview: Times for Latin, Heiti for Chinese. */
 :root{
   --app-font:'Times New Roman',Times,'Nimbus Roman',SimHei,'黑体','Heiti SC','Noto Sans CJK SC',serif;
-  --lh:32px;
+  --lh:27px;
   --editor-pad:24px;
   --border:#d8d8d8;
   --secondary:#626262;
@@ -63,7 +63,7 @@ body{padding:0;display:block;overflow:hidden;background:var(--surface)}
 }
 :root[data-theme=dark]{--border:#404040;--secondary:#a5a5a5;--muted:#a5a5a5;--comment:#a5a5a5}
 body{font-family:var(--app-font);font-size:15px;line-height:1.5}
-.syntax-text,.editor{font-family:var(--app-font);font-size:16px;padding-top:20px}
+.syntax-text,.editor{font-family:var(--app-font);font-size:16px;padding-top:16px}
 .prefix-input{font-family:var(--app-font)}
 .brand{font-size:16px;font-weight:500}
 .brand-en,.demo-badge,.tiny-tag,.sidebar-note,.status-message,.editor-metadata,
@@ -81,8 +81,9 @@ select,.number-input,.prefix-input{font-size:14px}
 .window-title{height:48px}
 .toolbar{height:66px}
 .target-button,.file-button{height:38px}
-.scene-sidebar{width:158px;padding-top:17px}
-.scene-button{min-height:42px}
+.scene-sidebar{width:158px;padding-top:14px}
+.scene-list{gap:2px}
+.scene-button{min-height:34px;padding:5px 12px;line-height:22px}
 .scene-button svg{width:16px;height:16px;opacity:1}
 .sidebar-note{white-space:normal}
 .action-sidebar{width:172px;padding:20px 16px 12px;background:var(--surface)}
