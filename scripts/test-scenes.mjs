@@ -29,6 +29,7 @@ try{
  await page.locator('#targetButton').dispatchEvent('pointerdown',{button:0});await page.waitForFunction(()=>document.getElementById('targetLabel').textContent==='MobaXterm');
  assert.equal(await page.locator('#targetSession').textContent(),'会话一 · UART 调试 · PID 123 · 输入区 456');
  assert.match(await page.locator('#targetButton').getAttribute('aria-label'),/会话一.*输入区 456/);
+ await page.locator('#targetButton').click();await page.locator('#targetAlias').fill('会话1 · UART');await page.locator('[data-close="targetDialog"]').last().click();assert.equal(await page.locator('#targetSession').textContent(),'会话1 · UART · PID 123 · 输入区 456');passed('optional session notes change only the displayed name, retaining the immutable input identity');
  await page.screenshot({path:path.join(evidence,'directory-session.png')});
  await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(680,440));await page.waitForFunction(()=>window.innerWidth===680);
  const geometry=await page.evaluate(()=>{const target=document.getElementById('targetButton').getBoundingClientRect(),file=document.getElementById('fileButton').getBoundingClientRect(),pin=document.getElementById('pinButton').getBoundingClientRect();return {targetEnd:target.right,fileStart:file.left,fileEnd:file.right,pinStart:pin.left,overflow:document.documentElement.scrollWidth>innerWidth};});
