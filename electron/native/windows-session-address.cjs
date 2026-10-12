@@ -1,5 +1,6 @@
 'use strict';
 const path=require('node:path');
+const {realpathSync}=require('node:fs');
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const runFile=promisify(execFile);
@@ -101,7 +102,7 @@ function createSessionAddressResolver({koffi=require('koffi'),onError=()=>{},onD
   }
   function sameRuntime(pid,root){
     const h=open(0x1000,0,pid);if(!h)return false;
-    try{const b=Buffer.alloc(65536),size=[32768];return !!image(h,0,b,size)&&path.dirname(b.subarray(0,size[0]*2).toString('utf16le')).toLowerCase()===path.dirname(root.image).toLowerCase();}finally{close(h);}
+    try{const b=Buffer.alloc(65536),size=[32768];if(!image(h,0,b,size))return false;const clientImage=b.subarray(0,size[0]*2).toString('utf16le');function directory(file){return realpathSync.native(path.dirname(file)).toLowerCase();}const match=directory(clientImage)===directory(root.image);onDiagnostic({stage:'runtime',pid,match,clientImage,rootImage:root.image});return match;}catch{return false;}finally{close(h);}
   }
   function pipeOwner(pid,root){
     const birth=created(pid);if(!birth||BigInt(birth)<BigInt(root.created)||!sameRuntime(pid,root))return false;
