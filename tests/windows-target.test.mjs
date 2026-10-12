@@ -4,7 +4,7 @@ import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {createBackend}=require('../electron/native/windows.cjs');
 
-function setup({className='CustomTerminal',automation=null,pickError=null,processName='Fixture',hostName=processName,hostPid=123}={}){
+function setup({className='CustomTerminal',automation=null,pickError=null,processName='Fixture',hostName=processName,hostPid=123,sessionAddress=()=>null}={}){
   const state={foreground:99,cursor:{x:140,y:260},focus:10,alive:true,enabled:true,readonly:false,covered:false,clicks:0,keys:[],shortInput:false,calls:[],verify:null,onFocus:null,activate:true,failClick:false,messages:[],postSuccess:true,visible:true,parent:1,hostPid,hostReplaced:false,element:10,elementTitle:'会话一',hostTitle:'终端窗口'};
   const functions={
     GetCursorPos:p=>{Object.assign(p,state.cursor);return 1;},SetCursorPos:(x,y)=>{state.cursor={x,y};return 1;},
@@ -35,7 +35,7 @@ function setup({className='CustomTerminal',automation=null,pickError=null,proces
     const name=signature.match(/__stdcall (\w+)\(/)[1];assert.ok(functions[name],name);return functions[name];
   }})};
   const worker={async call(method){state.calls.push(method);if(method==='pick'){if(pickError)throw pickError;return automation||{supported:false};}if(method==='focus'&&state.onFocus)return state.onFocus();if(method==='verify'&&state.verify)return state.verify();return true;},dispose(){}};
-  const backend=createBackend({koffi,worker,sleep:async()=>{}});
+  const backend=createBackend({koffi,worker,sleep:async()=>{},sessionAddress});
   return {state,backend};
 }
 
@@ -111,6 +111,17 @@ test('hidden MobaXterm session remains bound while another session is visible; l
   assert.deepEqual(state.messages.map(m=>m.h),[10,10]);assert.equal(state.foreground,99);assert.equal(state.clicks,0);assert.equal(first.sessionName,'会话一');
   const second=await backend.pick();assert.notEqual(second.sessionKey,first.sessionKey);assert.equal(second.sessionName,'会话二');
   assert.equal(backend.hasTarget(first.id),false);assert.equal(backend.hasTarget(second.id),true);
+});
+test('MobaXterm address metadata uses only the bound terminal identity and stays fixed on tab switches',async()=>{
+  const lookups=[];
+  const {backend,state}=setup({className:'CMoTTY',processName:'MoTTY',hostName:'MobaXterm_Personal_26.5',hostPid:456,sessionAddress:root=>{lookups.push(root);return {address:'192.168.1.10',port:2222};}});
+  const t=await backend.pick();assert.deepEqual(lookups,[{pid:123,created:'42'}]);assert.equal(t.sessionAddress,'192.168.1.10');assert.equal(t.sessionPort,2222);
+  state.visible=false;state.element=20;state.elementTitle='192.168.1.20';await backend.prepare(t.id);await backend.character(t.id,'A');
+  assert.equal(t.sessionAddress,'192.168.1.10');assert.equal(lookups.length,1);assert.equal(state.messages[0].h,10);
+});
+test('address lookup failures preserve native session binding and its original label',async()=>{
+  const {backend}=setup({className:'CMoTTY',processName:'MoTTY',hostName:'MobaXterm',hostPid:456,sessionAddress:()=>{throw new Error('Access denied');}});
+  const t=await backend.pick();assert.equal(t.sessionAddress,undefined);assert.equal(t.sessionName,'会话一');await backend.prepare(t.id);await backend.character(t.id,'A');
 });
 test('multi-tab shared input restores the bound session and verifies it before each character',async()=>{
   const {backend,state}=setup({processName:'WindowsTerminal',automation:{targetId:'tab-one',sessionBound:true,sessionName:'会话一',requiresNativeFocus:true}});

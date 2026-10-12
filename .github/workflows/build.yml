@@ -102,7 +102,7 @@ jobs:
   mobaxterm:
     name: Real MobaXterm compatibility
     runs-on: windows-latest
-    timeout-minutes: 6
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
