@@ -126,6 +126,12 @@ try{
     report.sshTargets=[sshOne,sshTwo];console.log('SSH TARGETS:',JSON.stringify(report.sshTargets));
     // Metadata only, for diagnosing process ownership without collecting commands.
     report.sshOwnership=JSON.parse(execFileSync('powershell.exe',['-NoProfile','-Command',`$p=Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name; $c=Get-NetTCPConnection | Where-Object { $_.RemotePort -in @(${firstSSH.port},${secondSSH.port}) } | Select-Object OwningProcess,RemoteAddress,RemotePort,State; @{ processes=@($p); connections=@($c) } | ConvertTo-Json -Depth 4`],{encoding:'utf8'}).replace(/^\uFEFF/,''));
+    const bin=path.dirname(sshOne.terminal.name);report.binFiles=await fs.readdir(bin);report.ps={};
+    for(const name of ['ps.exe','busybox.exe']){
+      if(!report.binFiles.includes(name))continue;
+      try{report.ps[name]=execFileSync(path.join(bin,name),name==='ps.exe'?['-W','-a']:['ps'],{encoding:'utf8',timeout:5000,windowsHide:true});}catch(e){report.ps[name]=e.message;}
+    }
+    console.log('OWNERSHIP:',JSON.stringify({processes:report.sshOwnership.processes.filter(p=>/moba|motty|ssh|zsh|bash/i.test(p.Name)),connections:report.sshOwnership.connections,binFiles:report.binFiles,ps:report.ps}));
     assert.equal(sshOne.target.sessionAddress,firstSSH.address);assert.equal(sshOne.target.sessionPort,firstSSH.port);
     assert.equal(visible(handle(sshOne.terminal.handle)),0);assert.ok(visible(handle(sshTwo.terminal.handle)));
     const boundSSH=sshOne.target,sshContext=await backend.prepare(boundSSH.id);for(const character of 'SSH_BOUND_ONE')await backend.character(boundSSH.id,character);await backend.enter(boundSSH.id);backend.finish(boundSSH.id,sshContext);
