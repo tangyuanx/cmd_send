@@ -31,7 +31,7 @@ function handle(value){return BigInt(value);}
 async function screen(name){const file=path.join(evidence,name).replaceAll("'","''");execFileSync('powershell.exe',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $r=[Windows.Forms.SystemInformation]::VirtualScreen; $b=New-Object Drawing.Bitmap($r.Width,$r.Height); $g=[Drawing.Graphics]::FromImage($b); $g.CopyFromScreen($r.Left,$r.Top,0,0,$b.Size); $b.Save('${file}'); $g.Dispose(); $b.Dispose()`]);}
 async function read(){try{return await fs.readFile(output,'utf8');}catch{return '';}}
 function message(h,msg,wp,lp=1){const result=[0];assert.ok(post(h,msg,wp,lp,0x22,1000,result),`Message ${msg} failed`);}
-let child,otherChild,backend;
+let child,tabLauncher,otherChild,backend;
 try{
   const response=await fetch('https://download.mobatek.net/2652026082870834/MobaXterm_Portable_v26.5.zip');assert.ok(response.ok);
   const bytes=Buffer.from(await response.arrayBuffer());assert.equal(createHash('sha256').update(bytes).digest('hex'),'a26e7e4e2f7bd47a13fbc6d93d08a2d946f21c3e0d135b9e4f55149842c09ef6');
@@ -62,6 +62,16 @@ try{
     message(terminalHandle,0x100,13,1|(0x1c<<16));message(terminalHandle,0x101,13,(1|(0x1c<<16))>>>0|0xc0000000);await delay(800);report.keyEnter=await read();console.log('WM_KEYDOWN:',JSON.stringify(report.keyEnter));
   }else{
     assert.equal(target.name,'MobaXterm');assert.equal(target.strategy,'后台终端输入');
+    assert.ok(target.sessionName);assert.ok(target.sessionKey);
+    // A second cat receiver lives in another tab of the SAME MobaXterm host.
+    const secondOutput=path.join(evidence,'session-two.txt'),secondUnix='/drives/'+secondOutput[0].toLowerCase()+secondOutput.slice(2).replaceAll('\\','/');
+    tabLauncher=spawn(path.join(temp,exe),['-newtab',`cat > '${secondUnix}'`],{stdio:'ignore'});
+    let second;
+    for(let i=0;i<200;i++){
+      second=windows(hostHandle).find(w=>w.handle!==terminal.handle&&/MoTTY/i.test(w.name)&&w.visible&&w.rect.right-w.rect.left>200);
+      if(second&&await fs.stat(secondOutput).then(()=>true,()=>false)&&!visible(terminalHandle))break;await delay(100);
+    }
+    assert.ok(second,'second terminal must be inside the original host');assert.equal(visible(terminalHandle),0,'original bound session must be hidden after tab switching');report.secondSession=second;
     // Cover the terminal with another application's focused Edit control.
     const fixture=await fs.readFile(new URL('../tests/fixtures/windows-input.ps1',import.meta.url),'utf8');
     const wrongOutput=path.join(evidence,'wrong-window.txt');
@@ -72,20 +82,24 @@ try{
     for(const character of 'CMD_SEND_中😀')await backend.character(target.id,character);await backend.enter(target.id);backend.finish(target.id,context);
     for(let i=0;i<80;i++){if((await read()).includes('CMD_SEND_中😀'))break;await delay(50);}
     assert.equal((await read()).replaceAll('\r',''),'CMD_SEND_中😀\n');assert.equal(pointer(foreground()),before);
+    assert.equal(await fs.readFile(secondOutput,'utf8'),'','the currently selected MobaXterm session must receive no input');
     assert.equal(await fs.readFile(wrongOutput,'utf8').catch(()=>''),'');
     report.received=await read();report.foregroundUnchanged=pointer(foreground())===before;report.otherWindowReceived='';
     await screen('terminal.png');
-    console.log('PASS: actual MobaXterm 26.5 embedded MoTTY receives ASCII/Chinese/emoji/Enter while another app keeps focus and receives no text');
-    execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore'});await delay(150);
+    console.log('PASS: actual MobaXterm 26.5 hidden bound session receives ASCII/Chinese/emoji/Enter; active session and foreground app receive nothing');
+    assert.notEqual(terminal.pid,host.pid,'closing a session must not close its host');
+    execFileSync('taskkill',['/PID',String(terminal.pid),'/T','/F'],{stdio:'ignore'});await delay(150);
     await assert.rejects(backend.character(target.id,'X'),/关闭|替换|失效/);
+    assert.equal(await fs.readFile(secondOutput,'utf8'),'');assert.ok(windows(hostHandle).some(w=>w.handle===second.handle),'the other session remains open');
     report.closedTargetRejected=true;
-    console.log('PASS: closing the actual MobaXterm rejects subsequent delivery, with no retargeting');
+    console.log('PASS: closing only the bound session rejects delivery while the other session remains open, with no retargeting');
   }
   if(probe)await screen('terminal.png');console.log('RECEIVED:',JSON.stringify(await read()));
 }catch(error){report.error=error.stack;await screen('failure.png').catch(()=>{});throw error;}
 finally{
   await fs.writeFile(path.join(evidence,'report.json'),JSON.stringify(report,null,2));backend?.dispose();
   if(child?.pid)try{execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore'});}catch{}
+  if(tabLauncher?.pid)try{execFileSync('taskkill',['/PID',String(tabLauncher.pid),'/T','/F'],{stdio:'ignore'});}catch{}
   if(otherChild?.pid)try{execFileSync('taskkill',['/PID',String(otherChild.pid),'/T','/F'],{stdio:'ignore'});}catch{}
   await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});
 }

@@ -57,7 +57,7 @@ function createBackend(){
       const app=api.application(pid),processInfo=identity(pid);api.timeout(element,.2);api.timeout(window,.2);api.timeout(app,.2);
       const name=string(app,'AXTitle')||processInfo.name,title=string(window,'AXTitle'),detail=string(element,'AXRoleDescription')||string(element,'AXRole');
       clear();const id=randomUUID();targets.set(id,{id,pid,created:processInfo.created,element,window,app,name,title,detail});element=null;window=null;
-      return {id,name,title,detail,strategy:'定向进程投递',verified:false};
+      return {id,name,title,sessionName:string(targets.get(id).element,'AXTitle')||title||'未命名输入区',sessionKey:`PID ${pid} · 输入区 ${String(koffi.address(targets.get(id).element))}`,detail,strategy:'定向进程投递',verified:false};
     }finally{if(hit)api.release(hit);if(element)api.release(element);if(window)api.release(window);}
   }
   function post(t,text,key=0){

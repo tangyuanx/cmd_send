@@ -113,3 +113,17 @@ svg{stroke-width:1.8}
   .settings-footnote{font-size:13px}
   .theme-row{gap:10px}
 }
+
+/* Bound application and immutable session identity share one compact target control. */
+.target-button{height:48px;min-width:0}
+.target-text{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;text-align:left}
+.target-text>span{display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.target-session{font-size:13px;line-height:17px;color:var(--secondary)}
+.target-session[hidden]{display:none}
+.scene-empty{margin:4px 8px;font-size:13px;line-height:1.8;color:var(--secondary)}
+@media(max-width:620px){.scene-empty{margin:0;line-height:17px}.scene-empty br{display:none}.target-session{font-size:12px}.target-button{gap:5px}}
+
+.target-note-row{padding:0 28px 12px;text-align:left}
+.target-note-row label{display:block;margin-bottom:8px;font-size:15px}
+.target-note-row input{width:100%;height:38px;padding:0 10px;box-sizing:border-box;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font:inherit}
+.target-note-row p{margin:8px 0 0;font-size:13px;color:var(--secondary);line-height:1.6}

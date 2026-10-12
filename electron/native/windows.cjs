@@ -28,7 +28,8 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
   function validate(id){
     const t=targets.get(id);if(!t)throw new Error('目标绑定已失效');const current=pidOf(t.element),host=pidOf(t.window);
     if(!api.valid(t.element)||!api.valid(t.window)||!api.enabled(t.element)||current.pid!==t.pid||current.thread!==t.thread||identity(t.pid).created!==t.created||text(t.element,api.className)!==t.className||!same(api.ancestor(t.element,2),t.window)||host.pid!==t.host.pid||host.thread!==t.host.thread||identity(host.pid).created!==t.host.created||text(t.window,api.className)!==t.host.className)throw new Error('目标窗口已关闭或被替换，请重新绑定');
-    if(t.terminal&&!api.visible(t.element))throw new Error('目标终端已隐藏或切换，请重新绑定');
+    // Hidden MobaXterm tabs keep their own MoTTY HWND and message handler.
+    // Visibility is not session identity; never redirect to the visible tab.
     if(t.background&&!t.terminal&&(BigInt(api.style(t.element,-16))&0x800n)!==0n)throw new Error('目标输入区为只读');return t;
   }
   function gui(thread){const info={cbSize:koffi.sizeof(GUI)};if(!api.gui(thread,info))throw new Error('目标输入区不可访问');return info;}
@@ -89,29 +90,31 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
     if(/^(Button|Static|ScrollBar|SysListView32|SysTreeView32|SysTabControl32|ToolbarWindow32)$/i.test(className))throw new Error('此区域不是文本输入区，请选择实际文本框或终端输入区');
     let automation=null;
     if(!background){
-      try{const result=await worker.call('pick',{x:point.x,y:point.y,processId:pid});if(result?.targetId)automation=result;}
+      try{const result=await worker.call('pick',{x:point.x,y:point.y,processId:pid,hostProcessId:hostId.pid,window:pointer(window)});if(result?.targetId)automation=result;}
       catch(error){if(error.code==='UIA_REJECTED')throw error; /* UIA is optional for self-drawn controls. */}
     }
+    if(!background&&/^(?:WindowsTerminal|Xshell\w*|SecureCRT|MobaXterm(?:_.*)?)$/i.test(hostInfo.name)&&!automation?.sessionBound)throw new Error('此终端未提供可区分的会话身份，请将会话拆为独立窗口后重新绑定');
     const local={...point};if(!api.toClient(element,local))throw new Error('无法定位所选输入区');
     const t={id,element,window,pid,thread,className,created:processInfo.created,host:{...hostId,created:hostInfo.created,className:text(window,api.className)},terminal,background,automation,point:local,epoch:0,inputFocus:null};
     if(!background&&!automation)clientPoint(t);
     targets.set(id,t);
     try{validate(id);if(automation)await worker.call('commit',{targetId:automation.targetId});}catch(error){targets.delete(id);throw error;}
     for(const key of targets.keys())if(key!==id)targets.delete(key);
-    return {id,name:displayName(hostInfo.name),title:text(window,api.title),detail:terminal?`${className} · ${processInfo.name}`:automation?.detail||className,strategy:terminal?'后台终端输入':background?'后台文本输入':automation?'具体控件聚焦输入':'所选区域聚焦输入',verified:false};
+    const title=text(window,api.title),sessionName=automation?.sessionName||text(element,api.title)||title||'未命名输入区',sessionKey=`PID ${pid} · 输入区 ${pointer(element)}`;
+    return {id,name:displayName(hostInfo.name),title,sessionName,sessionKey,detail:terminal?`${className} · ${processInfo.name}`:automation?.detail||className,strategy:terminal?'后台终端输入':background?'后台文本输入':automation?.sessionBound?'固定页签聚焦输入':automation?'具体控件聚焦输入':'所选区域聚焦输入',verified:false};
   }
   function unicode(char,key=0){const units=char?Array.from({length:char.length},(_,i)=>char.charCodeAt(i)):[null];for(const unit of units){const bytes=Buffer.alloc(80);for(let i=0;i<2;i++){const offset=i*40;bytes.writeUInt32LE(1,offset);bytes.writeUInt16LE(unit===null?key:0,offset+8);bytes.writeUInt16LE(unit===null?0:unit,offset+10);bytes.writeUInt32LE((unit===null?0:4)+(i===1?2:0),offset+12);}const sent=api.input(2,bytes,40);if(sent!==2)throw new Error('投递未完成，可能存在权限限制；已停止且不会自动重试');}}
   function modifiers(){return [16,17,18,91,92].some(key=>(api.key(key)&0x8000)!==0);}
   async function send(id,char,key=0){
     const t=validate(id),epoch=t.epoch;
     if(t.background){for(const unit of Array.from({length:char?.length||1},(_,i)=>char?char.charCodeAt(i):13)){const result=[0];if(!api.post(t.element,0x0102,unit,1,0x0002|0x0020,300,result)){const error=api.error();throw new Error(error===5?'后台投递被目标权限阻止，请以与目标相同的权限运行；已停止且不会重试':`后台投递失败（系统错误 ${error}），已停止且不会重试`);}}}
-    else{if(t.automation)await worker.call('verify',{targetId:t.automation.targetId});else checkNativeFocus(t);if(t.epoch!==epoch)throw new Error('发送已取消');validate(id);if(pointer(api.foreground())!==pointer(t.window))throw new Error('目标窗口已失去焦点，已停止投递');if(modifiers())throw new Error('检测到修饰键按下，已停止投递');unicode(char,key);}
+    else{if(t.automation)await worker.call('verify',{targetId:t.automation.targetId});if(!t.automation||t.automation.requiresNativeFocus)checkNativeFocus(t);if(t.epoch!==epoch)throw new Error('发送已取消');validate(id);if(pointer(api.foreground())!==pointer(t.window))throw new Error('目标窗口已失去焦点，已停止投递');if(modifiers())throw new Error('检测到修饰键按下，已停止投递');unicode(char,key);}
   }
   return {
     hasTarget:id=>targets.has(id),setExcludedPids:pids=>{excluded=new Set([process.pid,...pids]);},permission:()=>true,mouseDown:()=>(api.key(1)&0x8000)!==0,escapeDown:()=>(api.key(27)&0x8000)!==0,pick,
     async prepare(id){
       const t=validate(id);if(t.background)return {background:true};const previous=api.foreground(),epoch=t.epoch;
-      try{const deadline=Date.now()+2000;while(modifiers()){if(t.epoch!==epoch||Date.now()>deadline)throw new Error('请先松开修饰键，再重新发送');await sleep(20);}if(t.epoch!==epoch)throw new Error('发送已取消');await activate(t,epoch);if(t.automation){await worker.call('focus',{targetId:t.automation.targetId});await sleep(70);await worker.call('verify',{targetId:t.automation.targetId});}else await focusNative(t,epoch);
+      try{const deadline=Date.now()+2000;while(modifiers()){if(t.epoch!==epoch||Date.now()>deadline)throw new Error('请先松开修饰键，再重新发送');await sleep(20);}if(t.epoch!==epoch)throw new Error('发送已取消');await activate(t,epoch);if(t.automation){await worker.call('focus',{targetId:t.automation.targetId});await sleep(70);}if(!t.automation||t.automation.requiresNativeFocus)await focusNative(t,epoch);if(t.automation)await worker.call('verify',{targetId:t.automation.targetId});
         if(t.epoch!==epoch||pointer(api.foreground())!==pointer(t.window))throw new Error('无法聚焦指定输入区，未发送任何内容');return {previous};
       }catch(error){if(api.valid(previous)&&pointer(api.foreground())===pointer(t.window))api.activate(previous);throw error;}
     },

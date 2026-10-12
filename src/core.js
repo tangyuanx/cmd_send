@@ -1,13 +1,18 @@
 export function linesOf(text) {
   let offset=0;
-  return text.split('\n').map((raw,index)=>{const line={raw:raw.endsWith('\r')?raw.slice(0,-1):raw,index,start:offset,end:offset+raw.length};offset+=raw.length+1;return line;});
+  return text.split(/\r\n|\n|\r/).map((raw,index)=>{const line={raw,index,start:offset,end:offset+raw.length};offset+=raw.length+(text.slice(line.end,line.end+2)==='\r\n'?2:1);return line;});
+}
+// A heading occupies a complete line. Never treat brackets inside a command as a heading.
+export function sceneName(raw) {
+  const match=raw.trim().match(/^(?:\[([^\]\r\n]*)\]|［([^］\r\n]*)］|【([^】\r\n]*)】)\s*(?:(?:#|\/\/|;).*)?$/);
+  return match?match.slice(1).find(name=>name!==undefined).trim():null;
 }
 export function validCommand(raw,prefixes=['#','//',';']) {
   const s=raw.trim();
-  return !!s&&!/^\[[^\]\r\n]*\]$/.test(s)&&!prefixes.some(p=>p&&s.startsWith(p));
+  return !!s&&sceneName(raw)===null&&!prefixes.some(p=>p&&s.startsWith(p));
 }
 export function scenesOf(text) {
-  return linesOf(text).flatMap(l=>{const match=l.raw.trim().match(/^\[([^\]\r\n]+)\]$/);return match&&match[1].trim()?[{name:match[1].trim(),start:l.start,index:l.index}]:[];});
+  return linesOf(text).flatMap(l=>{const name=sceneName(l.raw);return name?[{name,start:l.start,index:l.index}]:[];});
 }
 export function sendPlan(text,start,end,prefixes=['#','//',';'],exhausted=false) {
   const lines=linesOf(text),selected=start!==end;
