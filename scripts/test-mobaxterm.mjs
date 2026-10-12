@@ -125,29 +125,6 @@ try{
     }
     const sshOne=await openSSH(firstSSH),sshTwo=await openSSH(secondSSH,false);
     report.sshTargets=[sshOne,sshTwo];console.log('SSH TARGETS:',JSON.stringify(report.sshTargets));
-    // Read only whitelisted connection metadata from these two controlled
-    // fixture sessions. Never collect command lines, registry, or full configs.
-    const namesText=execFileSync('powershell.exe',['-NoProfile','-Command',`Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -in @(${sshOne.terminal.pid},${sshTwo.terminal.pid}) } | ForEach-Object { if($_.CommandLine -match '-load\\s+"(TERM[0-9]+)"') { $Matches[1] } }`],{encoding:'utf8'});
-    const sessionNames=namesText.trim().split(/\s+/).filter(n=>/^TERM[0-9]+$/.test(n));report.sessionMetadata=[];
-    const bin=path.dirname(sshOne.terminal.name);
-    async function scan(directory,depth=0){
-      for(const entry of await fs.readdir(directory,{withFileTypes:true}).catch(()=>[])){
-        const file=path.join(directory,entry.name);
-        if(entry.isDirectory()&&depth<5)await scan(file,depth+1);
-        else if(entry.isFile()&&sessionNames.includes(entry.name)){
-          if((await fs.stat(file)).size>1024*1024)continue;
-          const settings=await fs.readFile(file,'utf8'),fields={};
-          for(const line of settings.split(/\r?\n/)){
-            const match=line.match(/^([^\\]+)\\([^\\]*)\\$/);
-            if(match&&/^(HostName|PortNumber|Protocol|MobaParentWnd|MobaTermNum)$/.test(match[1]))fields[match[1]]=match[2];
-          }
-          report.sessionMetadata.push({name:entry.name,relative:path.relative(path.resolve(bin,'../..'),file),fields,fieldNames:settings.split(/\r?\n/).map(line=>line.split('\\')[0])});
-        }
-      }
-    }
-    await scan(path.resolve(bin,'../..'));await scan(temp);
-    for(const name of sessionNames){const file=path.join(process.cwd(),name);if(await fs.stat(file).then(s=>s.isFile(),()=>false))await scan(process.cwd(),5);}
-    console.log('FIXTURE CONNECTION METADATA:',JSON.stringify(report.sessionMetadata));
     assert.equal(sshOne.target.sessionAddress,firstSSH.address);assert.equal(sshOne.target.sessionPort,firstSSH.port);
     assert.equal(visible(handle(sshOne.terminal.handle)),0);assert.ok(visible(handle(sshTwo.terminal.handle)));
     const boundSSH=sshOne.target,sshContext=await backend.prepare(boundSSH.id);for(const character of 'SSH_BOUND_ONE')await backend.character(boundSSH.id,character);await backend.enter(boundSSH.id);backend.finish(boundSSH.id,sshContext);

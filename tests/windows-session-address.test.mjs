@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-const {parseTcpTable,sessionEndpoint}=createRequire(import.meta.url)('../electron/native/windows-session-address.cjs');
+const {parseTcpTable,sessionEndpoint,parseCygwinProcesses,cygwinClients}=createRequire(import.meta.url)('../electron/native/windows-session-address.cjs');
 const root={pid:10,created:'100'},processes=[{...root,parent:1,name:'MoTTY.exe'},{pid:20,parent:10,created:'101',name:'bash.exe'},{pid:30,parent:20,created:'102',name:'ssh.exe'},{pid:40,parent:1,created:'103',name:'MoTTY.exe'},{pid:50,parent:40,created:'104',name:'ssh.exe'}];
 test('session endpoints belong to the exact bound terminal, never sibling tabs or the host',()=>{
   assert.deepEqual(sessionEndpoint(root,processes,[{pid:30,address:'192.168.1.10',port:22},{pid:50,address:'192.168.1.20',port:22},{pid:1,address:'192.168.1.30',port:22}]),{address:'192.168.1.10',port:22});
@@ -33,4 +33,12 @@ test('IPv6 TCP rows preserve port, compressed address, mapped IPv4 and scope',()
   bytes.set(Buffer.from('00000000000000000000ffffc0a8010a','hex'),84);
   bytes.set(Buffer.from('fe800000000000000000000000000001','hex'),140);bytes.writeUInt32BE(7,4+2*56+40);
   assert.deepEqual(parseTcpTable(bytes,23),[{pid:30,address:'2001:db8::1',port:22},{pid:30,address:'192.168.1.10',port:22},{pid:30,address:'fe80::1%7',port:22}]);
+});
+test('Cygwin exec ancestry is anchored to the exact terminal pipe, never tab order or another pipe',()=>{
+  const list=parseCygwinProcesses('100|700 (cygtermd) S 1 700 700 0\n200|701 (zsh) S 700 701 701 34818\n300|710 (_ssh) S 701 701 701 34818\n400|720 (cygtermd) S 1 720 720 0\n500|721 (_ssh) S 720 721 721 34819\n');
+  assert.deepEqual(cygwinClients(list,pid=>pid===100),[300]);
+  assert.deepEqual(cygwinClients(list,pid=>pid===400),[500]);
+  assert.deepEqual(cygwinClients(list,()=>false),[]);
+  assert.deepEqual(cygwinClients(list,()=>true),[]);
+  assert.deepEqual(cygwinClients(list.map(p=>p.winpid===300?{...p,name:'curl'}:p),pid=>pid===100),[]);
 });

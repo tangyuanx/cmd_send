@@ -115,7 +115,7 @@ test('hidden MobaXterm session remains bound while another session is visible; l
 test('MobaXterm address metadata uses only the bound terminal identity and stays fixed on tab switches',async()=>{
   const lookups=[];
   const {backend,state}=setup({className:'CMoTTY',processName:'MoTTY',hostName:'MobaXterm_Personal_26.5',hostPid:456,sessionAddress:root=>{lookups.push(root);return {address:'192.168.1.10',port:2222};}});
-  const t=await backend.pick();assert.deepEqual(lookups,[{pid:123,created:'42'}]);assert.equal(t.sessionAddress,'192.168.1.10');assert.equal(t.sessionPort,2222);
+  const t=await backend.pick();assert.deepEqual(lookups,[{pid:123,created:'42',image:'C:\\MoTTY.exe'}]);assert.equal(t.sessionAddress,'192.168.1.10');assert.equal(t.sessionPort,2222);
   state.visible=false;state.element=20;state.elementTitle='192.168.1.20';await backend.prepare(t.id);await backend.character(t.id,'A');
   assert.equal(t.sessionAddress,'192.168.1.10');assert.equal(lookups.length,1);assert.equal(state.messages[0].h,10);
 });
