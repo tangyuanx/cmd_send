@@ -131,9 +131,9 @@ function createSessionAddressResolver({koffi=require('koffi'),onError=()=>{},onD
         const script='for d in /proc/[0-9]*; do IFS= read -r s < "$d/stat" || continue; IFS= read -r w < "$d/winpid" || continue; print -r -- "$w|$s"; done; true';
         const {stdout}=await runFile(path.join(path.dirname(root.image),'zsh.exe'),['-f','-c',script],{windowsHide:true,timeout:2500,maxBuffer:256*1024});
         const parsed=parseCygwinProcesses(stdout);onDiagnostic({stage:'processes',processes:parsed});const clients=cygwinClients(parsed,pid=>pipeOwner(pid,root));onDiagnostic({stage:'clients',clients});
-        const identities=new Map(clients.filter(pid=>sameRuntime(pid,root)).map(pid=>[pid,created(pid)]));
+        const identities=new Map(clients.filter(pid=>sameRuntime(pid,root)).map(pid=>[pid,created(pid)]));onDiagnostic({stage:'identities',rootCreated:root.created,clients:clients.map(pid=>({pid,sameRuntime:sameRuntime(pid,root),created:created(pid)}))});
         const peers=[...connections(2),...connections(23)].filter(c=>identities.get(c.pid)&&BigInt(identities.get(c.pid))>=BigInt(root.created)&&created(c.pid)===identities.get(c.pid));
-        const unique=new Map(peers.map(c=>[`${c.address}:${c.port}`,{address:c.address,port:c.port}]));
+        onDiagnostic({stage:'peers',connections:[...connections(2),...connections(23)].filter(c=>clients.includes(c.pid)),peers});const unique=new Map(peers.map(c=>[`${c.address}:${c.port}`,{address:c.address,port:c.port}]));
         if(unique.size===1)result=[...unique.values()][0];
       }
       return created(root.pid)===root.created?result:null;
