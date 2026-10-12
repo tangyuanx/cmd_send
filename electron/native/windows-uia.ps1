@@ -4,6 +4,43 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName WindowsBase
+# Some providers retain/reuse tab peers after removal. RuntimeId alone is not
+# a lifetime token: invalidate the binding when its item/container is removed.
+# The C# callback runs on UIA's worker thread, without a PowerShell runspace.
+Add-Type -ReferencedAssemblies UIAutomationClient,UIAutomationTypes -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Windows.Automation;
+public sealed class CmdSessionLifetime : IDisposable {
+    private readonly AutomationElement root;
+    private readonly StructureChangedEventHandler handler;
+    private readonly HashSet<string> items = new HashSet<string>();
+    private readonly HashSet<string> containers = new HashSet<string>();
+    private volatile bool valid = true;
+    private static string Key(int[] id) { return String.Join(":", id); }
+    public bool IsValid { get { return valid; } }
+    public CmdSessionLifetime(AutomationElement root, AutomationElement[] tabs) {
+        this.root = root;
+        foreach (AutomationElement tab in tabs) {
+            items.Add(Key(tab.GetRuntimeId()));
+            SelectionItemPattern pattern = (SelectionItemPattern)tab.GetCurrentPattern(SelectionItemPattern.Pattern);
+            AutomationElement container = pattern.Current.SelectionContainer;
+            if (container != null) containers.Add(Key(container.GetRuntimeId()));
+        }
+        handler = delegate(object sender, StructureChangedEventArgs args) {
+            try {
+                string changed = Key(args.GetRuntimeId());
+                AutomationElement element = sender as AutomationElement;
+                string owner = element == null ? "" : Key(element.GetRuntimeId());
+                if ((args.StructureChangeType == StructureChangeType.ChildRemoved && (items.Contains(changed) || containers.Contains(changed))) ||
+                    ((args.StructureChangeType == StructureChangeType.ChildrenInvalidated || args.StructureChangeType == StructureChangeType.ChildrenBulkRemoved) && containers.Contains(owner))) valid = false;
+            } catch { valid = false; }
+        };
+        Automation.AddStructureChangedEventHandler(root, TreeScope.Subtree, handler);
+    }
+    public void Dispose() { Automation.RemoveStructureChangedEventHandler(root, handler); }
+}
+'@
 $targets = @{}
 function Runtime-Key($element) { return ($element.GetRuntimeId() -join ':') }
 function In-Root($element, $rootRuntime) {
@@ -16,6 +53,7 @@ function In-Root($element, $rootRuntime) {
 function Checked-Session($targetId, $select = $false) {
     if (-not $targets.ContainsKey($targetId)) { throw '目标输入区已失效，请重新绑定' }
     $target = $targets[$targetId]
+    if ($null -ne $target.lifetime -and -not $target.lifetime.IsValid) { throw '绑定的会话已关闭或被替换，请重新绑定' }
     if ($null -ne $target.root -and (($target.root.Current.ProcessId -ne $target.hostProcessId) -or (Runtime-Key $target.root) -ne $target.rootRuntime)) { throw '目标会话窗口已关闭或被替换，请重新绑定' }
     foreach ($tab in $target.tabs) {
         if ($tab.element.Current.ProcessId -ne $tab.processId -or (Runtime-Key $tab.element) -ne $tab.runtime -or -not $tab.element.Current.IsEnabled -or -not (In-Root $tab.element $target.rootRuntime)) { throw '绑定的会话已关闭或被替换，请重新绑定' }
@@ -84,7 +122,9 @@ while ($null -ne ($line = [Console]::ReadLine())) {
                 $targetId = [guid]::NewGuid().ToString()
                 $runtime = if ($null -ne $found) { Runtime-Key $found } else { '' }
                 $rootRuntime = if ($null -ne $root) { Runtime-Key $root } else { '' }
-                $targets[$targetId] = @{ element = $found; processId = [int]$request.processId; runtime = $runtime; root = $root; rootRuntime = $rootRuntime; hostProcessId = [int]$request.hostProcessId; tabs = $tabs }
+                $lifetime = $null
+                if ($tabs.Count -gt 0) { $lifetime = [CmdSessionLifetime]::new($root, [System.Windows.Automation.AutomationElement[]]@($tabs | ForEach-Object { $_.element })) }
+                $targets[$targetId] = @{ element = $found; processId = [int]$request.processId; runtime = $runtime; root = $root; rootRuntime = $rootRuntime; hostProcessId = [int]$request.hostProcessId; tabs = $tabs; lifetime = $lifetime }
                 $detail = if ($null -ne $found) { $found.Current.LocalizedControlType } else { '会话输入区' }
                 $result = @{ targetId = $targetId; detail = $detail; sessionBound = ($tabs.Count -gt 0); sessionName = (($tabs | ForEach-Object { $_.name }) -join ' / '); requiresNativeFocus = ($null -eq $found) }
             }
@@ -96,7 +136,7 @@ while ($null -ne ($line = [Console]::ReadLine())) {
             'commit' {
                 $target = Checked-Session $request.targetId
                 if ($null -ne $target.element) { $null = Checked-Element $request.targetId }
-                foreach ($key in @($targets.Keys)) { if ($key -ne $request.targetId) { $targets.Remove($key) } }
+                foreach ($key in @($targets.Keys)) { if ($key -ne $request.targetId) { if ($null -ne $targets[$key].lifetime) { $targets[$key].lifetime.Dispose() }; $targets.Remove($key) } }
                 $result = $true
             }
             'verify' {
