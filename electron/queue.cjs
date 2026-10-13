@@ -4,17 +4,18 @@ const {randomUUID}=require('node:crypto');
 
 // The queue owns the frozen snapshot. The renderer can only pause, resume or stop it.
 class SendQueue extends EventEmitter {
-  constructor(backend,{characterDelay=8,clock=()=>Date.now(),setTimer=setTimeout,clearTimer=clearTimeout}={}) {
-    super();Object.assign(this,{backend,characterDelay,clock,setTimer,clearTimer});this.run=null;this.activeSteps=new Set();this.stopPromise=null;
+  constructor(backend,{clock=()=>Date.now(),setTimer=setTimeout,clearTimer=clearTimeout}={}) {
+    super();Object.assign(this,{backend,clock,setTimer,clearTimer});this.run=null;this.activeSteps=new Set();this.stopPromise=null;
   }
-  start({commands,targetId,interval=500,rounds=1,enter=true}) {
+  start({commands,targetId,interval=500,characterInterval=2,rounds=1,enter=true}) {
     if(this.run||this.stopPromise||this.activeSteps.size)throw new Error('当前发送任务尚未结束，请稍后再试');
     if(!Array.isArray(commands)||!commands.length||commands.length>10000||commands.some(c=>typeof c!=='string'||!c.trim()||c.length>100000||/[\r\n\0]/u.test(c)))throw new Error('发送内容无效');
     if(commands.reduce((bytes,c)=>bytes+Buffer.byteLength(c,'utf8'),0)>20*1024*1024)throw new Error('发送内容不能超过 20 MB');
     if(typeof targetId!=='string'||!this.backend.hasTarget(targetId))throw new Error('请选择有效的目标输入区');
     if(!Number.isInteger(interval)||interval<50||interval>600000)throw new Error('发送间隔需在 50–600000 ms 之间');
+    if(!Number.isInteger(characterInterval)||characterInterval<0||characterInterval>1000)throw new Error('字符间隔需在 0–1000 ms 之间');
     if(rounds!=='loop'&&(!Number.isInteger(rounds)||rounds<1||rounds>100000))throw new Error('重复次数需在 1–100000 之间');
-    const r={id:randomUUID(),commands:Object.freeze(commands.map(c=>Object.freeze(Array.from(c)))),targetId,interval,rounds:rounds==='loop'?Infinity:rounds,enter:!!enter,index:0,round:0,char:0,total:0,phase:'prepare',paused:false,timer:null,remaining:0,deadline:0,busy:false,restore:null};
+    const r={id:randomUUID(),commands:Object.freeze(commands.map(c=>Object.freeze(Array.from(c)))),targetId,interval,characterInterval,rounds:rounds==='loop'?Infinity:rounds,enter:!!enter,index:0,round:0,char:0,total:0,phase:'prepare',paused:false,timer:null,remaining:0,deadline:0,busy:false,restore:null};
     this.run=r;this.publish('started');this.schedule(0);return {id:r.id};
   }
   state(type,error){const r=this.run;return r?{type,id:r.id,index:r.index,commandCount:r.commands.length,round:r.round+1,rounds:Number.isFinite(r.rounds)?r.rounds:null,total:r.total,paused:r.paused,error}:null;}
@@ -42,7 +43,9 @@ class SendQueue extends EventEmitter {
       if(this.run!==r)return;
       this.publish('progress');
       // Wait once between commands (including crossing a round), never before the first.
-      const delay=r.phase==='wait'?r.interval:r.phase==='typing'?this.characterDelay:0;
+      // Start the first character immediately; the configured delay only applies
+      // between adjacent characters in the same command.
+      const delay=r.phase==='wait'?r.interval:r.phase==='typing'&&r.char>0?r.characterInterval:0;
       if(r.paused)r.remaining=delay;else this.schedule(delay);
     } catch(error) {
       if(this.run!==r)return;
