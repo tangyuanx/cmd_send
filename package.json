@@ -1,6 +1,6 @@
 {
   "name": "cmd-send",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "TXT command editor and targeted desktop input for macOS and Windows",
   "main": "electron/main.cjs",
   "private": true,

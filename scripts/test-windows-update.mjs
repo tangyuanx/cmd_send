@@ -73,7 +73,7 @@ try{
   passed('manual download validates the actual newer Setup.exe');
   await page.locator('[data-close="updateDialog"]').click();
   await page.locator('#editor').fill('升级前保存中文😀\n');
-  await page.locator('#settingsButton').click();await page.locator('#intervalInput').fill('1234');await page.locator('[data-theme="dark"]').click();await page.locator('#settingsForm button[type="submit"]').click();
+  await page.locator('#settingsButton').click();await page.locator('#characterIntervalInput').fill('12');await page.locator('#intervalInput').fill('1234');await page.locator('[data-theme="dark"]').click();await page.locator('#settingsForm button[type="submit"]').click();
   await page.locator('#updateButton').click();await page.locator('#installUpdate').click();await page.locator('#quitDialog').waitFor({state:'visible'});
   await page.locator('#cancelQuit').click();assert.equal(await page.locator('#editor').inputValue(),'升级前保存中文😀\n');
   assert.equal(await fs.readFile(txt,'utf8'),'原始命令\n');passed('canceling upgrade preserves unsaved text and keeps the old version running');
@@ -90,7 +90,7 @@ try{
   await launch();assert.equal(await page.locator('#updateButton').textContent(),`v${next}`);
   await verifyInstalledIcons();
   assert.equal(await page.locator('#editor').inputValue(),'升级前保存中文😀\n');assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
-  await page.locator('#settingsButton').click();assert.equal(await page.locator('#intervalInput').inputValue(),'1234');await page.locator('[data-close="settingsDialog"]').click();
+  await page.locator('#settingsButton').click();assert.equal(await page.locator('#characterIntervalInput').inputValue(),'12');assert.equal(await page.locator('#intervalInput').inputValue(),'1234');await page.locator('[data-close="settingsDialog"]').click();
   passed('new version retains open TXT, saved content, send settings and theme');await page.screenshot({path:path.join(evidence,'upgraded.png')});await close();
 }catch(error){console.error('Restart diagnostic:',JSON.stringify({expected:canonical(executable),processes:processDetails()}));if(page&&!page.isClosed())await page.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});throw error;}
 finally{
