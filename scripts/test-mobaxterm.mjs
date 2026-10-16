@@ -32,7 +32,7 @@ function handle(value){return BigInt(value);}
 async function screen(name){const file=path.join(evidence,name).replaceAll("'","''");execFileSync('powershell.exe',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $r=[Windows.Forms.SystemInformation]::VirtualScreen; $b=New-Object Drawing.Bitmap($r.Width,$r.Height); $g=[Drawing.Graphics]::FromImage($b); $g.CopyFromScreen($r.Left,$r.Top,0,0,$b.Size); $b.Save('${file}'); $g.Dispose(); $b.Dispose()`]);}
 async function read(){try{return await fs.readFile(output,'utf8');}catch{return '';}}
 function message(h,msg,wp,lp=1){const result=[0];assert.ok(post(h,msg,wp,lp,0x22,1000,result),`Message ${msg} failed`);}
-let child,tabLauncher,otherChild,backend;const sshFixtures=[],sshLaunchers=[];
+let child,tabLauncher,otherChild,pageChild,backend;const sshFixtures=[],sshLaunchers=[];
 async function sshReceiver(address){
   const key=generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({type:'pkcs1',format:'pem'});
   const fixture={address,received:'',ready:false,clients:[],errors:[]};
@@ -68,7 +68,7 @@ try{
   cursor(point.x,point.y);report.host=host;report.terminal=terminal;report.hit=info(fromPoint(point));
   report.focusBefore={foreground:info(foreground()),global:focus(0),host:focus(host.thread),terminal:focus(terminal.thread),root:info(ancestor(terminalHandle,2))};
   const sessionAddress=require('../electron/native/windows-session-address.cjs').createSessionAddressResolver({onError:e=>console.log('ADDRESS ERROR:',e.message)});
-  backend=require('../electron/native/windows.cjs').createBackend({sessionAddress});const target=await backend.pick();report.target=target;console.log('TARGET:',JSON.stringify({host,terminal,target,focus:report.focusBefore}));
+  backend=require('../electron/native/windows.cjs').createBackend({sessionAddress});let target=await backend.pick();report.target=target;console.log('TARGET:',JSON.stringify({host,terminal,target,focus:report.focusBefore}));
   if(probe){
     try{const context=await backend.prepare(target.id);await backend.character(target.id,'A');await backend.enter(target.id);backend.finish(target.id,context);report.existing='success';}catch(e){report.existing=e.message;}
     report.focusAfter={global:focus(0),host:focus(host.thread),terminal:focus(terminal.thread)};
@@ -79,6 +79,25 @@ try{
   }else{
     assert.equal(target.name,'MobaXterm');assert.equal(target.strategy,'后台终端输入');
     assert.ok(target.sessionName);assert.ok(target.sessionKey);
+    const expectedSession=target.sessionKey;
+    report.pageDrops=[];
+    for(const fraction of [0.15,0.5,0.9]){
+      cursor(point.x,Math.round(terminal.rect.top+(terminal.rect.bottom-terminal.rect.top)*fraction));
+      target=await backend.pick();assert.equal(target.sessionKey,expectedSession);
+      report.pageDrops.push({fraction,target});
+    }
+    // Add a controlled read-only output sibling above the actual MoTTY.
+    // It belongs to a separate fixture process, not this tool's own process,
+    // and sends no input. Binding must recover the real terminal underneath.
+    const pageSource=await fs.readFile(new URL('../tests/fixtures/windows-moba-page.ps1',import.meta.url),'utf8');
+    pageChild=spawn('powershell.exe',['-NoProfile','-STA','-EncodedCommand',Buffer.from(pageSource,'utf16le').toString('base64')],{stdio:['ignore','pipe','pipe'],env:{...process.env,CMD_SEND_MOBA_TERMINAL:terminal.handle}});
+    let pageStderr='';pageChild.stderr.on('data',b=>pageStderr+=b);
+    const page=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Page fixture did not start: '+pageStderr)),15000);const lines=createInterface({input:pageChild.stdout});lines.on('line',line=>{try{const value=JSON.parse(line);if(value.ready){clearTimeout(timer);resolve(value);}}catch{}});pageChild.once('error',e=>{clearTimeout(timer);reject(e);});pageChild.once('exit',()=>{clearTimeout(timer);reject(new Error('Page fixture exited: '+pageStderr));});});
+    cursor(page.x,page.y);await delay(150);report.pageOutputHit=info(fromPoint({x:page.x,y:page.y}));
+    assert.equal(report.pageOutputHit.handle,String(page.handle),'drop must hit the read-only output sibling, not the terminal itself');
+    target=await backend.pick();assert.equal(target.sessionKey,expectedSession);assert.equal(target.strategy,'后台终端输入');report.pageOutputTarget=target;
+    execFileSync('taskkill',['/PID',String(pageChild.pid),'/T','/F'],{stdio:'ignore'});pageChild=null;await delay(100);
+    console.log('PASS: top/middle/bottom MobaXterm drops and separate read-only output sibling bind the same actual MoTTY terminal');
     // A second cat receiver lives in another tab of the SAME MobaXterm host.
     const secondOutput=path.join(evidence,'session-two.txt'),secondUnix='/drives/'+secondOutput[0].toLowerCase()+secondOutput.slice(2).replaceAll('\\','/');
     tabLauncher=spawn(path.join(temp,exe),['-newtab',`cat > '${secondUnix}'`],{stdio:'ignore'});
@@ -142,7 +161,9 @@ finally{
   if(child?.pid)try{execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore'});}catch{}
   if(tabLauncher?.pid)try{execFileSync('taskkill',['/PID',String(tabLauncher.pid),'/T','/F'],{stdio:'ignore'});}catch{}
   if(otherChild?.pid)try{execFileSync('taskkill',['/PID',String(otherChild.pid),'/T','/F'],{stdio:'ignore'});}catch{}
+  if(pageChild?.pid)try{execFileSync('taskkill',['/PID',String(pageChild.pid),'/T','/F'],{stdio:'ignore'});}catch{}
   for(const launcher of sshLaunchers)if(launcher.pid)try{execFileSync('taskkill',['/PID',String(launcher.pid),'/T','/F'],{stdio:'ignore'});}catch{}
   for(const fixture of sshFixtures){for(const client of fixture.clients)client.end();fixture.server.close();}
   await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});
 }
+

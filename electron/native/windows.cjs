@@ -7,12 +7,15 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
   const POINT=koffi.struct('CmdWinPoint',{x:'int32_t',y:'int32_t'});
   const RECT=koffi.struct('CmdWinRect',{left:'int32_t',top:'int32_t',right:'int32_t',bottom:'int32_t'});
   const GUI=koffi.struct('CmdWinGui',{cbSize:'uint32_t',flags:'uint32_t',active:'void *',focus:'void *',capture:'void *',menuOwner:'void *',moveSize:'void *',caret:'void *',caretRect:RECT});
+  const ENUM=koffi.proto('int __stdcall CmdWinChildEnum(void *window, intptr_t param)');
   const api={
     cursor:user.func('int __stdcall GetCursorPos(_Out_ CmdWinPoint *point)'),setCursor:user.func('int __stdcall SetCursorPos(int x, int y)'),fromPoint:user.func('void * __stdcall WindowFromPoint(CmdWinPoint point)'),ancestor:user.func('void * __stdcall GetAncestor(void *window, uint32_t flags)'),
     toClient:user.func('int __stdcall ScreenToClient(void *window, _Inout_ CmdWinPoint *point)'),toScreen:user.func('int __stdcall ClientToScreen(void *window, _Inout_ CmdWinPoint *point)'),clientRect:user.func('int __stdcall GetClientRect(void *window, _Out_ CmdWinRect *rect)'),iconic:user.func('int __stdcall IsIconic(void *window)'),metrics:user.func('int __stdcall GetSystemMetrics(int index)'),
     pid:user.func('uint32_t __stdcall GetWindowThreadProcessId(void *window, _Out_ uint32_t *pid)'),valid:user.func('int __stdcall IsWindow(void *window)'),enabled:user.func('int __stdcall IsWindowEnabled(void *window)'),visible:user.func('int __stdcall IsWindowVisible(void *window)'),
     className:user.func('int __stdcall GetClassNameW(void *window, _Out_ uint16_t *text, int length)'),title:user.func('int __stdcall GetWindowTextW(void *window, _Out_ uint16_t *text, int length)'),
     style:user.func('intptr_t __stdcall GetWindowLongPtrW(void *window, int index)'),
+    parent:user.func('void * __stdcall GetParent(void *window)'),rect:user.func('int __stdcall GetWindowRect(void *window, _Out_ CmdWinRect *rect)'),
+    childAt:user.func('void * __stdcall ChildWindowFromPointEx(void *window, CmdWinPoint point, uint32_t flags)'),children:user.func('int __stdcall EnumChildWindows(void *parent, CmdWinChildEnum *callback, intptr_t param)'),
     gui:user.func('int __stdcall GetGUIThreadInfo(uint32_t thread, _Inout_ CmdWinGui *info)'),foreground:user.func('void * __stdcall GetForegroundWindow()'),activate:user.func('int __stdcall SetForegroundWindow(void *window)'),focus:user.func('void * __stdcall SetFocus(void *window)'),
     attach:user.func('int __stdcall AttachThreadInput(uint32_t from, uint32_t to, int attach)'),child:user.func('int __stdcall IsChild(void *parent, void *child)'),show:user.func('int __stdcall ShowWindow(void *window, int command)'),
     key:user.func('int16_t __stdcall GetAsyncKeyState(int key)'),post:user.func('intptr_t __stdcall SendMessageTimeoutW(void *window, uint32_t msg, uintptr_t wp, intptr_t lp, uint32_t flags, uint32_t timeout, _Out_ uintptr_t *result)'),
@@ -41,6 +44,44 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
   function nativeTerminal(className,name){return /^CMoTTY$/i.test(className)&&/^MoTTY$/i.test(name)||/^PuTTY$/i.test(className)&&/^(?:putty|puttytel|MoTTY)$/i.test(name);}
   function displayName(name){return /^MobaXterm(?:_|$)/i.test(name)?'MobaXterm':name;}
   function within(parent,child){return !!child&&(same(parent,child)||api.child(parent,child)!==0);}
+  function ancestors(element,host){const path=[],seen=new Set();for(let h=element;h&&!seen.has(pointer(h))&&path.length<64;h=api.parent(h)){path.push(h);seen.add(pointer(h));if(same(h,host))break;}return path;}
+  function contains(rect,point){return rect&&rect.left<=point.x&&point.x<rect.right&&rect.top<=point.y&&point.y<rect.bottom;}
+  function screenClient(element){const r={};if(!api.clientRect(element,r))return null;const a={x:r.left,y:r.top},b={x:r.right,y:r.bottom};if(!api.toScreen(element,a)||!api.toScreen(element,b))return null;return {left:a.x,top:a.y,right:b.x,bottom:b.y};}
+  function visibleBounds(element,host){
+    const r={};if(!api.visible(element)||!api.rect(element,r))return null;
+    for(const parent of ancestors(api.parent(element),host)){const clip=screenClient(parent);if(!clip)return null;r.left=Math.max(r.left,clip.left);r.top=Math.max(r.top,clip.top);r.right=Math.min(r.right,clip.right);r.bottom=Math.min(r.bottom,clip.bottom);}
+    return r.left<r.right&&r.top<r.bottom?r:null;
+  }
+  function mobaTerminal(element,window,point){
+    const isTerminal=h=>{const cls=text(h,api.className);return /^(CMoTTY|PuTTY)$/i.test(cls)&&nativeTerminal(cls,identity(pidOf(h).pid).name);};
+    const select=h=>{if(!isTerminal(h))throw new Error('未识别到此页面的 MobaXterm 终端，请重新选择会话页面');return h;};
+    // A terminal's descendants (including its scroll/input controls) belong
+    // to that exact terminal regardless of current host keyboard focus.
+    for(const h of ancestors(element,window))if(isTerminal(h))return h;
+    const cls=text(element,api.className);
+    if(/^(Button|SysListView32|SysTreeView32|SysTabControl32|ToolbarWindow32)$/i.test(cls))return null;
+    if(nativeEdit(cls)&&(BigInt(api.style(element,-16))&0x800n)===0n)return null;
+    if(!contains(screenClient(window),point))return null;
+    // WindowFromPoint skips some read-only/disabled display controls. Follow
+    // the visible page under the same screen point, without moving focus.
+    const path=[window],seen=new Set([pointer(window)]);
+    for(let i=0;i<64;i++){const local={...point};if(!api.toClient(path.at(-1),local))break;const h=api.childAt(path.at(-1),local,1|4);if(!h||seen.has(pointer(h)))break;path.push(h);seen.add(pointer(h));}
+    for(const h of path.toReversed())if(isTerminal(h))return h;
+    const handles=[],callback=koffi.register(h=>{handles.push(h);return 1;},koffi.pointer(ENUM));
+    try{api.children(window,callback,0);}finally{koffi.unregister(callback);}
+    // Process lookups and errors stay outside the native callback.
+    const terminals=handles.filter(h=>/^(CMoTTY|PuTTY)$/i.test(text(h,api.className))).map(h=>({h,rect:visibleBounds(h,window)})).filter(t=>t.rect);
+    for(const page of path.slice(1).toReversed()){
+      const candidates=terminals.filter(t=>within(page,t.h));if(!candidates.length)continue;
+      const exact=candidates.filter(t=>contains(t.rect,point));if(exact.length===1)return select(exact[0].h);
+      // Serial output and the input can be sibling controls in one page.
+      // Limit expansion to the terminal's horizontal band, keeping shared
+      // navigation/side panels from selecting a different session.
+      if(candidates.length===1&&!exact.length){const t=candidates[0];if(contains(screenClient(page),point)&&t.rect.left<=point.x&&point.x<t.rect.right)return select(t.h);return null;}
+      throw new Error('此区域包含多个会话，请拖到要绑定的具体会话页面内');
+    }
+    return null;
+  }
   function clientPoint(t){const rect={};if(!api.clientRect(t.element,rect)||t.point.x<rect.left||t.point.y<rect.top||t.point.x>=rect.right||t.point.y>=rect.bottom)throw new Error('所选输入位置已不可用，请重新绑定');const point={...t.point};if(!api.toScreen(t.element,point))throw new Error('无法定位所选输入区');return point;}
   function checkNativeFocus(t){const focus=gui(t.focusThread).focus;if(!t.inputFocus||!api.valid(t.inputFocus)||!same(focus,t.inputFocus)||!within(t.window,focus))throw new Error('目标输入区的焦点已改变，已停止投递');}
   async function activate(t,epoch){
@@ -83,9 +124,12 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
     t.inputFocus=focus;t.focusThread=pidOf(focus).thread;checkNativeFocus(t);
   }
   async function pick(){
-    const point={};if(!api.cursor(point))throw new Error('无法读取指针位置');const element=api.fromPoint(point);if(!element)throw new Error('未找到目标窗口');
-    const window=api.ancestor(element,2),{pid,thread}=pidOf(element),hostId=pidOf(window);if(!window||!pid||!hostId.pid||excluded.has(pid)||excluded.has(hostId.pid))throw new Error('不能将工具自身绑定为目标');
-    const className=text(element,api.className),processInfo=identity(pid),hostInfo=hostId.pid===pid?processInfo:identity(hostId.pid),id=randomUUID();
+    const point={};if(!api.cursor(point))throw new Error('无法读取指针位置');let element=api.fromPoint(point);if(!element)throw new Error('未找到目标窗口');
+    const window=api.ancestor(element,2),hostId=pidOf(window),hit=pidOf(element);if(!window||!hit.pid||!hostId.pid||excluded.has(hit.pid)||excluded.has(hostId.pid))throw new Error('不能将工具自身绑定为目标');
+    const hostInfo=identity(hostId.pid);
+    if(/^MobaXterm(?:_|$)/i.test(hostInfo.name))element=mobaTerminal(element,window,point)||element;
+    const {pid,thread}=pidOf(element);if(!pid||excluded.has(pid))throw new Error('不能将工具自身绑定为目标');
+    const className=text(element,api.className),processInfo=hostId.pid===pid?hostInfo:identity(pid),id=randomUUID();
     const terminal=nativeTerminal(className,processInfo.name),background=nativeEdit(className)||terminal;
     if(/^(Button|Static|ScrollBar|SysListView32|SysTreeView32|SysTabControl32|ToolbarWindow32)$/i.test(className))throw new Error('此区域不是文本输入区，请选择实际文本框或终端输入区');
     let automation=null;
@@ -95,6 +139,9 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
     }
     if(!background&&/^(?:WindowsTerminal|Xshell\w*|SecureCRT|MobaXterm(?:_.*)?)$/i.test(hostInfo.name)&&!automation?.sessionBound)throw new Error('此终端未提供可区分的会话身份，请将会话拆为独立窗口后重新绑定');
     const local={...point};if(!api.toClient(element,local))throw new Error('无法定位所选输入区');
+    // A page drop may be outside the terminal's own input rectangle. This
+    // metadata is never used to click/focus a background terminal.
+    if(terminal){const r={};if(!api.clientRect(element,r)||r.right<=r.left||r.bottom<=r.top)throw new Error('目标会话输入区已不可用');if(!contains(r,local)){local.x=Math.floor((r.left+r.right)/2);local.y=Math.floor((r.top+r.bottom)/2);}}
     const t={id,element,window,pid,thread,className,created:processInfo.created,host:{...hostId,created:hostInfo.created,className:text(window,api.className)},terminal,background,automation,point:local,epoch:0,inputFocus:null};
     if(!background&&!automation)clientPoint(t);
     targets.set(id,t);
@@ -128,4 +175,5 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
   };
 }
 module.exports={createBackend};
+
 

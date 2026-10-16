@@ -12,6 +12,7 @@ function setup({className='CustomTerminal',automation=null,pickError=null,proces
     IsWindow:h=>h&&state.alive?1:0,IsWindowEnabled:()=>+state.enabled,IsWindowVisible:()=>+state.visible,
     GetClassNameW:(h,b)=>{const text=h===10||h===20?className:'CustomTerminal';b.write(text,'utf16le');return text.length;},
     GetWindowTextW:(h,b)=>{const value=h===1?state.hostTitle:state.elementTitle;b.write(value,'utf16le');return value.length;},GetWindowLongPtrW:()=>state.readonly?0x800:0,
+    GetParent:()=>1,GetWindowRect:(_h,r)=>{Object.assign(r,{left:100,top:200,right:500,bottom:500});return 1;},ChildWindowFromPointEx:h=>h,EnumChildWindows:()=>1,
     GetGUIThreadInfo:(_thread,info)=>{info.focus=state.focus;return 1;},
     GetForegroundWindow:()=>state.foreground,SetForegroundWindow:h=>{if(state.activate)state.foreground=h;return +state.activate;},
     SetFocus:()=>10,AttachThreadInput:()=>1,IsChild:(parent,child)=>+(parent===1&&child===10),ShowWindow:()=>1,IsIconic:()=>0,
@@ -31,7 +32,7 @@ function setup({className='CustomTerminal',automation=null,pickError=null,proces
     QueryFullProcessImageNameW:(h,_flags,b,size)=>{const value=`C:\\${h===hostPid?hostName:processName}.exe`;b.write(value,'utf16le');size[0]=value.length;return 1;},
     CloseHandle:()=>1,GetCurrentThreadId:()=>6,GetLastError:()=>5,
   };
-  const koffi={struct:()=>({}),sizeof:()=>72,address:p=>p,load:()=>({func:signature=>{
+  const koffi={struct:()=>({}),proto:()=>({}),pointer:p=>p,register:fn=>fn,unregister:()=>{},sizeof:()=>72,address:p=>p,load:()=>({func:signature=>{
     const name=signature.match(/__stdcall (\w+)\(/)[1];assert.ok(functions[name],name);return functions[name];
   }})};
   const worker={async call(method){state.calls.push(method);if(method==='pick'){if(pickError)throw pickError;return automation||{supported:false};}if(method==='focus'&&state.onFocus)return state.onFocus();if(method==='verify'&&state.verify)return state.verify();return true;},dispose(){}};
@@ -141,3 +142,4 @@ test('background terminal permission failures propagate without foreground fallb
   const {backend,state}=setup({className:'CMoTTY',processName:'MoTTY'});const target=await backend.pick();state.postSuccess=false;
   await assert.rejects(backend.character(target.id,'X'),/权限.*停止.*不会重试/);assert.equal(state.messages.length,1);assert.equal(state.clicks,0);assert.deepEqual(state.keys,[]);
 });
+
