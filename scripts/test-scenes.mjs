@@ -1,3 +1,4 @@
+import {dragTarget} from '../tests/fixtures/drag-target.mjs';
 // Shipped renderer: directory parsing, editing, file switching and session labels.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -26,7 +27,7 @@ try{
  await page.locator('#fileButton').click();await page.locator('[data-file="plain"]').click();assert.equal(await page.locator('.scene-button').count(),0);assert.equal(await page.locator('#sceneEmpty').isVisible(),true);
  await page.locator('#editor').fill('【新场景】\necho new');assert.equal(await page.locator('.scene-name').textContent(),'[新场景]');assert.equal(await page.locator('#sceneEmpty').isHidden(),true);
  await page.locator('#fileButton').click();await page.locator('[data-file="scenes"]').click();assert.equal(await page.locator('.scene-button').count(),5);passed('no-heading files show the required format; edits and file switches rebuild the directory');
- await page.locator('#targetButton').dispatchEvent('pointerdown',{button:0});await page.waitForFunction(()=>document.getElementById('targetLabel').textContent==='192.168.1.10:22');
+ await dragTarget(page);await page.waitForFunction(()=>document.getElementById('targetLabel').textContent==='192.168.1.10:22');
  assert.equal(await page.locator('#targetSession').textContent(),'MobaXterm · 会话一 · UART 调试 · PID 123 · 输入区 456');
  assert.match(await page.locator('#targetButton').getAttribute('aria-label'),/192\.168\.1\.10:22.*会话一.*输入区 456/);
  await page.locator('#targetButton').click();await page.locator('#targetAlias').fill('会话1 · UART');await page.locator('[data-close="targetDialog"]').last().click();assert.equal(await page.locator('#targetSession').textContent(),'MobaXterm · 会话1 · UART · PID 123 · 输入区 456');assert.equal(await page.locator('#targetLabel').textContent(),'192.168.1.10:22');passed('optional session notes change only the displayed name, retaining the immutable input identity');
@@ -39,3 +40,4 @@ try{
  assert.deepEqual(errors,[]);
 }catch(error){await page?.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});throw error;}
 finally{await application?.close().catch(()=>{});await fs.writeFile(path.join(evidence,'checks.json'),JSON.stringify({version,checks,errors},null,2));await fs.rm(temp,{recursive:true,force:true});}
+

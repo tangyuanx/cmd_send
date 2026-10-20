@@ -1,3 +1,4 @@
+import {dragTarget} from '../tests/fixtures/drag-target.mjs';
 // Exercise the shipped renderer in real Electron; no native target input.
 import assert from 'node:assert/strict';import fs from 'node:fs/promises';
 import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';
@@ -73,7 +74,7 @@ try{
  // Select a complete command as before, then send. Painted marks never enter the payload.
  await page.keyboard.press('Control+f');await page.locator('#findInput').fill('FINDME');
  await page.locator('#editor').evaluate(el=>{el.setSelectionRange(0,0);el.dispatchEvent(new Event('select'));});
- await page.locator('#targetButton').dispatchEvent('pointerdown',{button:0});await page.waitForFunction(()=>document.getElementById('targetLabel').textContent==='测试目标');
+ await dragTarget(page);await page.waitForFunction(()=>document.getElementById('targetLabel').textContent==='测试目标');
  await page.locator('#sendButton').click();await page.waitForFunction(()=>document.getElementById('sendButton').disabled);
  const plans=await application.evaluate(()=>global.searchCaptures.plans);assert.equal(plans.length,1);assert.deepEqual(plans[0].commands,['echo 中😀 FINDME']);
  assert.equal(await page.locator('.find-match').count(),0);assert.equal(await page.locator('#editor').inputValue(),edited);passed('search rendering cannot change the actual command sent or TXT buffer');
@@ -83,3 +84,4 @@ try{
  await page.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});
  }throw error;}
 finally{await application?.close().catch(()=>{});await fs.writeFile(path.join(evidence,'checks.json'),JSON.stringify({version,platform:process.platform,checks,errors},null,2));await fs.rm(temp,{recursive:true,force:true});}
+

@@ -52,6 +52,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Verify direct target dragging and cancellation
+        timeout-minutes: 3
+        run: npm run test:target
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: target-drag-evidence-${{ matrix.artifact }}
+          path: test-output/target-drag/
+          if-no-files-found: ignore
       - name: Verify session labels and scene directories
         timeout-minutes: 3
         run: npm run test:scenes
@@ -170,4 +179,5 @@ jobs:
           gh release create "$VERSION" --verify-tag --draft --title "Cmd Send $VERSION · 命令定向" --notes-file "docs/releases/$VERSION.md"
           gh release upload "$VERSION" release/*.zip release/*.exe release/*.blockmap release/latest.yml release/SHA256SUMS.txt
           gh release edit "$VERSION" --draft=false --latest
+
 

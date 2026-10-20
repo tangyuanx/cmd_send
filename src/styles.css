@@ -128,3 +128,7 @@ svg{stroke-width:1.8}
 .target-note-row label{display:block;margin-bottom:8px;font-size:15px}
 .target-note-row input{width:100%;height:38px;padding:0 10px;box-sizing:border-box;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font:inherit}
 .target-note-row p{margin:8px 0 0;font-size:13px;color:var(--secondary);line-height:1.6}
+
+
+/* Preserve direct pointer dragging across the button and window edges. */
+#targetButton{user-select:none;touch-action:none}

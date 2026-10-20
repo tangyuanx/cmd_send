@@ -75,7 +75,7 @@ app.whenReady().then(async()=>{
     return backend.permission();
   });
   handle('desktop:pick',()=>{
-    unlocked();if(!backend.permission())throw new Error('请先在系统设置 → 隐私与安全性 → 辅助功能中允许「命令定向」，再重新长按拾取。');
+    unlocked();if(!backend.permission())throw new Error('请先在系统设置 → 隐私与安全性 → 辅助功能中允许「命令定向」，再重新拖选目标。');
     cancelPick();return new Promise((resolve,reject)=>{
       const started=Date.now();picker={resolve,reject,timer:setInterval(()=>{
         const current=picker;
@@ -112,4 +112,5 @@ app.whenReady().then(async()=>{
 app.on('before-quit',event=>{if(win&&!approvedClose){event.preventDefault();void requestClose();}});
 app.on('window-all-closed',()=>app.quit());
 }
+
 
