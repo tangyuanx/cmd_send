@@ -31,6 +31,21 @@ try{
  // Selecting the real editor via keyboard must import the current range,
  // ignoring headings/comments/blank lines rather than reading an old caret.
  await close();await page.locator('#editor').focus();await page.keyboard.press(mod+'+A');await open();await page.locator('#scheduleCommands').fill('sentinel');await read();assert.equal(await page.locator('#scheduleCommands').inputValue(),'echo A\necho B\necho C');assert.match(await status(),/已读取 3 条指令.*第 2–6 行（选区）/);
+ // Choose non-adjacent workspace lines explicitly, including another open file.
+ await page.locator('#scheduleChoose').click();
+ await page.locator('#scheduleSourceLines input').nth(1).check();
+ await page.locator('#scheduleSourceLines input').nth(5).check();
+ assert.equal(await page.locator('#scheduleSourceLines input').nth(0).isDisabled(),true);
+ await page.locator('#scheduleSourceFile').selectOption('second');
+ await page.locator('#scheduleSourceLines input').nth(1).check();
+ await page.locator('#scheduleSourceFile').selectOption('first');
+ assert.equal(await page.locator('#scheduleSourceLines input').nth(5).isChecked(),true);
+ await page.locator('#scheduleChooseConfirm').click();
+ assert.equal(await page.locator('#scheduleCommands').inputValue(),'echo A\necho C\nsecond command');
+ await page.locator('#scheduleChoose').click();await page.locator('#scheduleSourceLines input').nth(4).check();await page.locator('#scheduleChooseCancel').click();
+ assert.equal(await page.locator('#scheduleCommands').inputValue(),'echo A\necho C\nsecond command');
+ await page.screenshot({path:path.join(evidence,'workspace-choice.png')});
+ await read();
  await page.locator('#scheduleName').fill('保留的任务');await page.locator('#schedulePeriod').fill('12');await page.locator('#scheduleSave').click();await page.waitForFunction(()=>document.querySelectorAll('.schedule-job').length===1);
  await page.screenshot({path:path.join(evidence,'selection-read.png')});
  // A new read changes the draft, not the saved task or unrelated fields.

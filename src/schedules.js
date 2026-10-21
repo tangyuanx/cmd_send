@@ -1,10 +1,10 @@
 import {bindTargetDrag} from './target-drag.js';
-import {validCommand} from './core.js';
+import {validCommand,linesOf} from './core.js';
 const $=id=>document.getElementById(id);
 const statuses={unbound:'待重新绑定',paused:'已暂停',scheduled:'等待发送',waiting:'排队等待',running:'发送中',completed:'已完成',failed:'发送失败',missed:'已错过时间'};
 const time=value=>value?new Date(value).toLocaleString():'';
 const label=t=>t?[t.alias||t.sessionName||t.title||t.name,t.sessionAddress,t.sessionPort?`端口 ${t.sessionPort}`:'',t.sessionKey].filter(Boolean).join(' · '):'拖到目标输入区后释放';
-export function initSchedules({desktop,initial,getTarget,getSource,getSettings,canPick,toast,initIcons}){
+export function initSchedules({desktop,initial,getTarget,getWorkspace,getSource,getSettings,canPick,toast,initIcons}){
   let jobs=initial,id=null,target=null,picking=false,busy=false;
   const dialog=$('schedulesDialog');
   function error(message=''){$('scheduleError').textContent=message;$('scheduleError').hidden=!message;}
@@ -45,9 +45,45 @@ export function initSchedules({desktop,initial,getTarget,getSource,getSettings,c
     importStatus(sourceMessage(source,same?'已重新读取':'已读取'));$('scheduleImportStatus').scrollIntoView({block:'nearest'});
     toast(`${same?'已重新读取':'已读取'} ${source.commands.length} 条指令，尚未保存任务`);
   }
+  let workspace=[],choice=new Map();
+  function choiceCount(){
+    const count=[...choice.values()].reduce((n,set)=>n+set.size,0);
+    $('scheduleChoiceCount').textContent=`已选择 ${count} 条指令`;
+    $('scheduleChooseConfirm').disabled=!count;
+  }
+  function choiceRows(){
+    const file=workspace.find(f=>f.id===$('scheduleSourceFile').value);
+    const list=$('scheduleSourceLines');list.replaceChildren();
+    if(!file)return;
+    if(!choice.has(file.id))choice.set(file.id,new Set());
+    const selected=choice.get(file.id);
+    for(const line of linesOf(file.text)){
+      const row=document.createElement('label');row.className='schedule-source-line';
+      const box=document.createElement('input');box.type='checkbox';box.disabled=!validCommand(line.raw,getSettings().prefixes);box.checked=selected.has(line.index);box.setAttribute('aria-label',`第 ${line.index+1} 行：${line.raw}`);
+      box.addEventListener('change',()=>{if(box.checked)selected.add(line.index);else selected.delete(line.index);choiceCount();});
+      const number=document.createElement('span');number.className='schedule-source-number';number.textContent=String(line.index+1);
+      const text=document.createElement('span');text.textContent=line.raw||' ';row.append(box,number,text);list.append(row);
+    }
+    choiceCount();
+  }
+  $('scheduleChoose').addEventListener('click',()=>{
+    if(busy||picking)return;workspace=getWorkspace();choice=new Map();
+    if(!workspace.length){importStatus('请先在工作区打开 TXT 文件。',true);return;}
+    $('scheduleSourceFile').replaceChildren(...workspace.map(f=>{const option=document.createElement('option');option.value=f.id;option.textContent=f.name;return option;}));
+    $('scheduleSourceFile').value=(workspace.find(f=>f.active)||workspace[0]).id;
+    $('scheduleChooser').hidden=false;choiceRows();$('scheduleChooser').scrollIntoView({block:'nearest'});
+  });
+  $('scheduleSourceFile').addEventListener('change',choiceRows);
+  $('scheduleChooseCancel').addEventListener('click',()=>{$('scheduleChooser').hidden=true;});
+  $('scheduleChooseConfirm').addEventListener('click',()=>{
+    const commands=workspace.flatMap(f=>linesOf(f.text).filter(l=>choice.get(f.id)?.has(l.index)).map(l=>l.raw));
+    if(!commands.length)return;
+    $('scheduleCommands').value=commands.join('\n');$('scheduleChooser').hidden=true;
+    importStatus(`已从工作区选择 ${commands.length} 条指令，尚未保存任务`);error();
+  });
   async function edit(job=null){
     if(picking||busy)return;await desktop.releaseScheduleDraft?.();
-    id=job?.id||null;target=job?.target||getTarget()||null;const s=getSettings();
+    $('scheduleChooser').hidden=true;id=job?.id||null;target=job?.target||getTarget()||null;const s=getSettings();
     const source=job?null:getSource();
     $('scheduleName').value=job?.name||`定时任务 ${jobs.length+1}`;$('scheduleCommands').value=job?job.commands.join('\n'):(source?.commands||[]).join('\n');
     importStatus(job?'当前为已保存的指令副本；读取可用主编辑器的内容替换。':source?.commands.length?sourceMessage(source,'已自动读取'):'可直接输入指令，或先在主编辑器选择内容后读取。');

@@ -179,3 +179,10 @@ svg{stroke-width:1.8}
 .update-notes table{border-collapse:collapse;width:100%;margin:9px 0}.update-notes th,.update-notes td{border:1px solid var(--border);padding:4px 6px;text-align:left}
 
 .schedule-import-status{overflow-wrap:anywhere;min-height:22px}.schedule-import-status.is-error{color:var(--text);border-left:2px solid var(--text);padding:6px 9px;background:var(--subtle)}
+
+.schedule-chooser{border:1px solid var(--border);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.schedule-source-lines{max-height:240px;overflow:auto;border-block:1px solid var(--border)}
+.schedule-source-line{display:flex;align-items:flex-start;gap:9px;padding:7px 4px;cursor:pointer;white-space:pre-wrap;overflow-wrap:anywhere}
+.schedule-source-line:has(input:checked){background:var(--subtle)}
+.schedule-source-line:has(input:disabled){color:var(--secondary);cursor:default}
+.schedule-source-line input{flex:none;margin-top:3px}.schedule-source-number{min-width:24px;color:var(--secondary);text-align:right;font-variant-numeric:tabular-nums}

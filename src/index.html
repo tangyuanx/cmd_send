@@ -45,7 +45,14 @@
     <form id="scheduleForm" class="schedule-form">
       <label for="scheduleName">任务名称</label><input id="scheduleName" maxlength="80" placeholder="例如：串口 1 · 查询状态" required>
       <label for="scheduleTarget">发送目标</label><button type="button" id="scheduleTarget" class="secondary-button schedule-target" title="按住后直接拖到目标输入区释放"><span data-icon="crosshair"></span><span id="scheduleTargetLabel">拖到目标输入区后释放</span></button><button type="button" id="scheduleUseTarget" class="schedule-link">使用顶部已绑定的目标</button>
-      <div class="schedule-label-row"><label for="scheduleCommands">发送指令 · 每行一条</label><button type="button" id="scheduleImport" class="schedule-link" title="读取主编辑器中的当前行或选区，替换下方指令">读取当前行 / 选区</button></div>
+      <div class="schedule-label-row"><label for="scheduleCommands">发送指令 · 每行一条</label><button type="button" id="scheduleImport" class="schedule-link" title="读取主编辑器中的当前行或选区，替换下方指令">读取当前行 / 选区</button><button type="button" id="scheduleChoose" class="schedule-link">从工作区选择…</button></div>
+      <section id="scheduleChooser" class="schedule-chooser" hidden aria-label="从工作区选择命令">
+        <label for="scheduleSourceFile">工作区文件</label><select id="scheduleSourceFile"></select>
+        <p class="schedule-note">勾选任意行，可多选；按原文顺序填入指令。</p>
+        <div id="scheduleSourceLines" class="schedule-source-lines"></div>
+        <p id="scheduleChoiceCount" class="schedule-note" role="status"></p>
+        <div class="schedule-save-actions"><button type="button" id="scheduleChooseCancel" class="secondary-button">取消</button><button type="button" id="scheduleChooseConfirm" class="primary-button">使用所选命令</button></div>
+      </section>
       <textarea id="scheduleCommands" aria-describedby="scheduleImportStatus" rows="4" spellcheck="false" placeholder="输入需要定时发送的指令" required></textarea>
       <p id="scheduleImportStatus" class="schedule-note schedule-import-status" role="status" aria-live="polite" aria-atomic="true">读取主编辑器中的当前行或选区。</p><p class="schedule-note">保存独立的指令副本；标题、空行和整行注释会被忽略。</p>
       <label for="scheduleMode">定时方式</label><select id="scheduleMode"><option value="interval">按间隔循环</option><option value="once">指定时间发送一次</option></select>
