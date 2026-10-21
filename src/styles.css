@@ -165,3 +165,15 @@ svg{stroke-width:1.8}
 .schedule-save-actions{display:flex;justify-content:flex-end;gap:8px;margin:9px 0 5px;flex-wrap:wrap}
 .schedules-dialog .dialog-footer{padding:12px 20px}
 @media(max-width:760px){.schedules-layout{grid-template-columns:205px minmax(0,1fr)}.schedule-form{padding:14px}.schedule-sidebar{padding:10px}.schedule-label-row{align-items:flex-start;flex-direction:column;gap:3px}}
+
+/* Formatted release notes retain the update dialog's font and scroll area. */
+.update-notes{white-space:normal;overflow-wrap:anywhere}
+.update-notes>:first-child{margin-top:0}.update-notes>:last-child{margin-bottom:0}
+.update-notes p,.update-notes ul,.update-notes ol,.update-notes pre,.update-notes blockquote{margin:9px 0}
+.update-notes ul,.update-notes ol{padding-left:22px}.update-notes li{margin:5px 0;padding-left:2px}
+.update-notes li>p{margin:4px 0}.update-notes li>ul,.update-notes li>ol{margin:4px 0}
+.update-notes h1,.update-notes h2,.update-notes h3,.update-notes h4,.update-notes h5,.update-notes h6{font-size:15px;line-height:1.7;font-weight:600;color:var(--text);margin:13px 0 6px;letter-spacing:0}
+.update-notes code{font-family:Consolas,Menlo,monospace;font-size:.95em;background:var(--subtle);border-radius:3px;padding:1px 4px}
+.update-notes pre{white-space:pre-wrap;background:var(--subtle);padding:8px;border-radius:4px}.update-notes pre code{padding:0;background:none}
+.update-notes blockquote{border-left:2px solid var(--border);padding-left:10px}.update-notes hr{border:0;border-top:1px solid var(--border);margin:12px 0}
+.update-notes table{border-collapse:collapse;width:100%;margin:9px 0}.update-notes th,.update-notes td{border:1px solid var(--border);padding:4px 6px;text-align:left}

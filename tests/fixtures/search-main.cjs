@@ -13,6 +13,8 @@ app.whenReady().then(async()=>{
    schedules=new ScheduleManager({backend,broker:new DeliveryBroker(backend),file:path.join(fixture.profile,'schedules.json')});await schedules.load();global.scheduleManager=schedules;
    schedules.on('state',value=>win.webContents.send('fixture:schedules',value));
  }
+ global.setUpdateFixture=value=>{fixture.config.update=value;win.webContents.send('fixture:update',value);};
+ ipcMain.handle('fixture:update-check',()=>fixture.config.update);
  ipcMain.handle('fixture:config',()=>({...fixture.config,schedules:schedules?.snapshot()||[]}));
  ipcMain.handle('fixture:schedule-save',(_event,value)=>schedules.save(value,targets.get(value.targetId)));
  ipcMain.handle('fixture:schedule-action',(_event,id,action)=>schedules.action(id,action));

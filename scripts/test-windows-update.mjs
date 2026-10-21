@@ -52,7 +52,7 @@ try{
     requests++;const pathname=new URL(req.url,'http://localhost').pathname;
     if(pathname==='/latest.yml'){
       if(mode==='missing'){res.writeHead(404);res.end();return;}
-      const value=structuredClone(manifest);if(mode==='corrupt'){value.files[0].sha512=Buffer.alloc(64).toString('base64');value.sha512=value.files[0].sha512;}
+      const value=structuredClone(manifest);value.releaseNotes='<p>更新说明格式验证。</p><ul><li>保留列表结构</li><li><strong>下载并重启</strong></li></ul>';if(mode==='corrupt'){value.files[0].sha512=Buffer.alloc(64).toString('base64');value.sha512=value.files[0].sha512;}
       res.setHeader('Content-Type','text/yaml');res.end(yaml.dump(value));
     }else if(pathname===`/${manifest.files[0].url}`){res.setHeader('Content-Length',manifest.files[0].size);createReadStream(installer).pipe(res);}
     else{res.writeHead(404);res.end();}
@@ -66,6 +66,7 @@ try{
   await page.locator('#updateButton').click();await page.waitForFunction(()=>document.querySelector('#updateStatus').textContent.includes('暂未提供'));
   passed('missing update metadata shows a recoverable error');
   mode='corrupt';await page.locator('#checkUpdate').click();await page.waitForFunction(()=>document.querySelector('#updateStatus').textContent.includes('发现新版本'));
+  assert.equal(await page.locator('#updateNotes li').count(),2);assert.equal(await page.locator('#updateNotes strong').innerText(),'下载并重启');assert.ok(!(await page.locator('#updateNotes').innerText()).includes('<li>'));passed('real updater HTML release notes render as formatted lists and emphasis');
   await page.locator('#downloadUpdate').click();await page.waitForFunction(()=>document.querySelector('#updateStatus').textContent.includes('校验失败'),{},{timeout:120000});
   assert.equal(await page.locator('#installUpdate').isVisible(),false);passed('real updater rejects a corrupt SHA512 and cannot install it');
   mode='valid';await page.locator('#checkUpdate').click();await page.waitForFunction(()=>document.querySelector('#updateStatus').textContent.includes('发现新版本'));
@@ -100,3 +101,4 @@ finally{
   await fs.writeFile(path.join(evidence,'checks.json'),JSON.stringify({version,next,checks},null,2));
   await fs.rm(temp,{recursive:true,force:true}).catch(()=>{});
 }
+

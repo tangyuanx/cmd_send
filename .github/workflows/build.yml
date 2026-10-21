@@ -79,6 +79,15 @@ jobs:
           name: repeat-evidence-${{ matrix.artifact }}
           path: test-output/repeat/
           if-no-files-found: ignore
+      - name: Verify formatted update descriptions and download progress
+        timeout-minutes: 3
+        run: npm run test:update-notes
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: update-notes-evidence-${{ matrix.artifact }}
+          path: test-output/update-notes/
+          if-no-files-found: ignore
       - name: Verify independent scheduled sending in the desktop renderer
         timeout-minutes: 3
         run: npm run test:schedules
