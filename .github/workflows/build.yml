@@ -88,6 +88,15 @@ jobs:
           name: update-notes-evidence-${{ matrix.artifact }}
           path: test-output/update-notes/
           if-no-files-found: ignore
+      - name: Verify reading current editor commands into scheduled tasks
+        timeout-minutes: 3
+        run: npm run test:schedule-import
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: schedule-import-evidence-${{ matrix.artifact }}
+          path: test-output/schedule-import/
+          if-no-files-found: ignore
       - name: Verify independent scheduled sending in the desktop renderer
         timeout-minutes: 3
         run: npm run test:schedules

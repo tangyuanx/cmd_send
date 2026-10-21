@@ -4,14 +4,14 @@ const $=id=>document.getElementById(id);
 const statuses={unbound:'待重新绑定',paused:'已暂停',scheduled:'等待发送',waiting:'排队等待',running:'发送中',completed:'已完成',failed:'发送失败',missed:'已错过时间'};
 const time=value=>value?new Date(value).toLocaleString():'';
 const label=t=>t?[t.alias||t.sessionName||t.title||t.name,t.sessionAddress,t.sessionPort?`端口 ${t.sessionPort}`:'',t.sessionKey].filter(Boolean).join(' · '):'拖到目标输入区后释放';
-export function initSchedules({desktop,initial,getTarget,getCommands,getSettings,canPick,toast,initIcons}){
+export function initSchedules({desktop,initial,getTarget,getSource,getSettings,canPick,toast,initIcons}){
   let jobs=initial,id=null,target=null,picking=false,busy=false;
   const dialog=$('schedulesDialog');
   function error(message=''){$('scheduleError').textContent=message;$('scheduleError').hidden=!message;}
   function renderTarget(){$('scheduleTargetLabel').textContent=picking?'拖到目标后释放 · Esc 取消':label(target);$('scheduleTarget').title=label(target);$('scheduleUseTarget').disabled=!getTarget()||picking;}
   function mode(){$('schedulePeriodRow').hidden=$('scheduleMode').value!=='interval';$('scheduleAtRow').hidden=$('scheduleMode').value!=='once';$('scheduleAt').required=$('scheduleMode').value==='once';$('schedulePeriod').required=$('scheduleMode').value==='interval';}
   function render(){
-    const list=$('scheduleList');list.replaceChildren();$('scheduleEmpty').hidden=jobs.length>0;
+    $('scheduleImport').disabled=busy||picking;const list=$('scheduleList');list.replaceChildren();$('scheduleEmpty').hidden=jobs.length>0;
     const count=jobs.filter(j=>j.enabled).length;$('scheduleActiveCount').textContent=String(count);$('scheduleActiveCount').hidden=!count;
     for(const j of jobs){
       const row=document.createElement('article');row.className='schedule-job'+(id===j.id?' selected':'');row.dataset.job=j.id;
@@ -28,11 +28,29 @@ export function initSchedules({desktop,initial,getTarget,getCommands,getSettings
       row.append(actions);list.append(row);
     }
   }
-  function importCommands(){const commands=getCommands();if(!commands.length){error('当前行或选区中没有可发送的指令');return;}$('scheduleCommands').value=commands.join('\n');error();}
+  function importStatus(message,failed=false){const node=$('scheduleImportStatus');node.textContent=message;node.classList.toggle('is-error',failed);}
+  function sourceMessage(source,verb){
+    const location=source.firstLine===source.lastLine?`第 ${source.firstLine} 行`:`第 ${source.firstLine}–${source.lastLine} 行`;
+    return `${verb} ${source.commands.length} 条指令 · ${source.name} · ${location}${source.selected?'（选区）':''}`;
+  }
+  function importCommands(){
+    if(busy||picking)return;
+    const source=getSource();
+    if(!source?.commands.length){
+      const message=!source?'请先在主界面打开 TXT 文件，再读取当前行或选区。':source.selected?'主编辑器选区中没有有效指令，请重新选择；原指令已保留。':'当前位置及其后没有有效指令，请在主编辑器选择需要的内容；原指令已保留。';
+      importStatus(message,true);$('scheduleImportStatus').scrollIntoView({block:'nearest'});toast(message);return;
+    }
+    const text=source.commands.join('\n'),same=$('scheduleCommands').value===text;
+    $('scheduleCommands').value=text;$('scheduleCommands').scrollTop=0;error();
+    importStatus(sourceMessage(source,same?'已重新读取':'已读取'));$('scheduleImportStatus').scrollIntoView({block:'nearest'});
+    toast(`${same?'已重新读取':'已读取'} ${source.commands.length} 条指令，尚未保存任务`);
+  }
   async function edit(job=null){
     if(picking||busy)return;await desktop.releaseScheduleDraft?.();
     id=job?.id||null;target=job?.target||getTarget()||null;const s=getSettings();
-    $('scheduleName').value=job?.name||`定时任务 ${jobs.length+1}`;$('scheduleCommands').value=job?.commands.join('\n')||getCommands().join('\n');
+    const source=job?null:getSource();
+    $('scheduleName').value=job?.name||`定时任务 ${jobs.length+1}`;$('scheduleCommands').value=job?job.commands.join('\n'):(source?.commands||[]).join('\n');
+    importStatus(job?'当前为已保存的指令副本；读取可用主编辑器的内容替换。':source?.commands.length?sourceMessage(source,'已自动读取'):'可直接输入指令，或先在主编辑器选择内容后读取。');
     $('scheduleMode').value=job?.mode||'interval';const period=job?.periodMs||5000;const unit=period%3600000===0?3600000:period%60000===0?60000:1000;
     $('scheduleUnit').value=String(unit);$('schedulePeriod').value=String(period/unit);
     const date=new Date(job?.at||Date.now()+60000);$('scheduleAt').value=new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,19);
@@ -54,6 +72,7 @@ export function initSchedules({desktop,initial,getTarget,getCommands,getSettings
   $('schedulesButton').addEventListener('click',async()=>{if(!desktop.saveSchedule){toast('当前环境不支持定时发送');return;}await edit(jobs.find(j=>j.id===id));if(!dialog.open)dialog.showModal();});
   $('scheduleNew').addEventListener('click',()=>void edit());$('scheduleMode').addEventListener('change',mode);$('scheduleImport').addEventListener('click',importCommands);
   $('scheduleUseTarget').addEventListener('click',async()=>{if(picking||busy)return;await desktop.releaseScheduleDraft?.();target=getTarget();renderTarget();error();});
+  $('scheduleCommands').addEventListener('input',()=>importStatus('指令已手动修改；读取将用主编辑器的当前行或选区替换。'));
   $('scheduleForm').addEventListener('submit',async event=>{
     event.preventDefault();if(busy||picking)return;error();
     const commands=$('scheduleCommands').value.split(/\r?\n/).filter(c=>validCommand(c,getSettings().prefixes));

@@ -1,6 +1,6 @@
 {
   "name": "cmd-send",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "TXT command editor and targeted desktop input for macOS and Windows",
   "main": "electron/main.cjs",
   "private": true,
@@ -19,7 +19,8 @@
     "test:scenes": "node scripts/test-scenes.mjs",
     "test:target": "node scripts/test-target-drag.mjs",
     "test:schedules": "node scripts/test-schedules.mjs",
-    "test:update-notes": "node scripts/test-update-notes.mjs"
+    "test:update-notes": "node scripts/test-update-notes.mjs",
+    "test:schedule-import": "node scripts/test-schedule-import.mjs"
   },
   "dependencies": {
     "electron-updater": "6.8.9",

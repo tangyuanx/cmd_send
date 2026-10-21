@@ -149,7 +149,13 @@ config=await desktop.config();renderWindowState(config.window);document.body.dat
 renderUpdate(config.update);files=(config.session?.files||[]).map(file=>buffer(file.name,file.text,file));activeId=config.session?.activeId||files[0]?.id||null;
 if(config.platform==='darwin')document.querySelectorAll('kbd,.rail-shortcuts>span').forEach(el=>el.innerHTML=el.innerHTML.replaceAll('Ctrl','⌘'));
 loadBuffer();
-initSchedules({desktop,initial:config.schedules||[],getTarget:()=>target,getCommands:()=>{const f=active();return f?sendPlan(f.text,f.start,f.end,settings.prefixes,false).commands.map(c=>c.text):[];},getSettings:()=>settings,canPick:()=>!run&&!picking,toast,initIcons});
+initSchedules({desktop,initial:config.schedules||[],getTarget:()=>target,getSource:()=>{
+ const f=active();if(!f)return null;
+ // Read the native textarea range now, rather than depending on a deferred
+ // selection event having updated the file buffer before the dialog opens.
+ syncSelection();const plan=sendPlan($('editor').value,f.start,f.end,settings.prefixes,false);
+ return {name:f.name,selected:plan.selected,commands:plan.commands.map(c=>c.text),firstLine:plan.commands[0]?.index+1,lastLine:plan.commands.at(-1)?.index+1};
+},getSettings:()=>settings,canPick:()=>!run&&!picking,toast,initIcons});
 if(config.session?.failed)toast(`${config.session.failed} 个文件未能重新打开，请检查文件是否已移动或删除`);
 
 
