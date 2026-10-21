@@ -133,10 +133,17 @@ while ($null -ne ($line = [Console]::ReadLine())) {
                 if ($null -ne $target.element) { $element = Checked-Element $request.targetId; $element.SetFocus() }
                 $result = $true
             }
+            'drop' {
+                if ($targets.ContainsKey($request.targetId)) {
+                    if ($null -ne $targets[$request.targetId].lifetime) { $targets[$request.targetId].lifetime.Dispose() }
+                    $targets.Remove($request.targetId)
+                }
+                $result = @{ dropped = $true }
+            }
             'commit' {
                 $target = Checked-Session $request.targetId
                 if ($null -ne $target.element) { $null = Checked-Element $request.targetId }
-                foreach ($key in @($targets.Keys)) { if ($key -ne $request.targetId) { if ($null -ne $targets[$key].lifetime) { $targets[$key].lifetime.Dispose() }; $targets.Remove($key) } }
+
                 $result = $true
             }
             'verify' {
@@ -153,4 +160,5 @@ while ($null -ne ($line = [Console]::ReadLine())) {
     } catch { $response = @{ id = $request.id; ok = $false; error = $_.Exception.Message; code = $errorCode } }
     [Console]::WriteLine(($response | ConvertTo-Json -Compress -Depth 5))
 }
+
 

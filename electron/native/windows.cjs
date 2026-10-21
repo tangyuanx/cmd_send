@@ -123,6 +123,7 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
     if(nativeEdit(focusedClass)&&(BigInt(api.style(focus,-16))&0x800n)!==0n)throw new Error('目标输入区为只读');
     t.inputFocus=focus;t.focusThread=pidOf(focus).thread;checkNativeFocus(t);
   }
+  function drop(id){const t=targets.get(id);targets.delete(id);if(t?.automation)void worker.call('drop',{targetId:t.automation.targetId}).catch(()=>{});}
   async function pick(){
     const point={};if(!api.cursor(point))throw new Error('无法读取指针位置');let element=api.fromPoint(point);if(!element)throw new Error('未找到目标窗口');
     const window=api.ancestor(element,2),hostId=pidOf(window),hit=pidOf(element);if(!window||!hit.pid||!hostId.pid||excluded.has(hit.pid)||excluded.has(hostId.pid))throw new Error('不能将工具自身绑定为目标');
@@ -145,8 +146,8 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
     const t={id,element,window,pid,thread,className,created:processInfo.created,host:{...hostId,created:hostInfo.created,className:text(window,api.className)},terminal,background,automation,point:local,epoch:0,inputFocus:null};
     if(!background&&!automation)clientPoint(t);
     targets.set(id,t);
-    try{validate(id);if(automation)await worker.call('commit',{targetId:automation.targetId});}catch(error){targets.delete(id);throw error;}
-    for(const key of targets.keys())if(key!==id)targets.delete(key);
+    try{validate(id);if(automation)await worker.call('commit',{targetId:automation.targetId});}catch(error){drop(id);throw error;}
+    for(const [key,target] of targets)if(key!==id&&!target.refs)drop(key);
     const title=text(window,api.title),sessionName=automation?.sessionName||text(element,api.title)||title||'未命名输入区',sessionKey=`PID ${pid} · 输入区 ${pointer(element)}`;
     let endpoint=null;
     if(terminal&&/^MobaXterm(?:_|$)/i.test(hostInfo.name)){
@@ -163,6 +164,8 @@ function createBackend({koffi=require('koffi'),worker=new AutomationWorker(),sle
     else{if(t.automation)await worker.call('verify',{targetId:t.automation.targetId});if(!t.automation||t.automation.requiresNativeFocus)checkNativeFocus(t);if(t.epoch!==epoch)throw new Error('发送已取消');validate(id);if(pointer(api.foreground())!==pointer(t.window))throw new Error('目标窗口已失去焦点，已停止投递');if(modifiers())throw new Error('检测到修饰键按下，已停止投递');unicode(char,key);}
   }
   return {
+    retain(id){const t=validate(id);t.refs=(t.refs||0)+1;},release(id){const t=targets.get(id);if(t&&--t.refs<=0)drop(id);},
+    deliveryInfo(id){const t=validate(id);return {key:`${t.pid}:${t.created}:${pointer(t.element)}:${t.className}`,background:t.background};},
     hasTarget:id=>targets.has(id),setExcludedPids:pids=>{excluded=new Set([process.pid,...pids]);},permission:()=>true,mouseDown:()=>(api.key(1)&0x8000)!==0,escapeDown:()=>(api.key(27)&0x8000)!==0,pick,
     async prepare(id){
       const t=validate(id);if(t.background)return {background:true};const previous=api.foreground(),epoch=t.epoch;

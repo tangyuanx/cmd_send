@@ -79,6 +79,15 @@ jobs:
           name: repeat-evidence-${{ matrix.artifact }}
           path: test-output/repeat/
           if-no-files-found: ignore
+      - name: Verify independent scheduled sending in the desktop renderer
+        timeout-minutes: 3
+        run: npm run test:schedules
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: schedule-evidence-${{ matrix.artifact }}
+          path: test-output/schedules/
+          if-no-files-found: ignore
       - name: Verify search rendering and navigation
         timeout-minutes: 3
         run: npm run test:search

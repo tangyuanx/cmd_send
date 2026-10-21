@@ -142,7 +142,7 @@ try{
       activate(hostHandle);await delay(200);cursor(Math.round((selected.rect.left+selected.rect.right)/2),Math.round((selected.rect.top+selected.rect.bottom)/2));
       return {terminal:selected,target:bind?await backend.pick():null};
     }
-    const sshOne=await openSSH(firstSSH),sshTwo=await openSSH(secondSSH,false);
+    const sshOne=await openSSH(firstSSH);backend.retain(sshOne.target.id);const sshTwo=await openSSH(secondSSH,false);
     report.sshTargets=[sshOne,sshTwo];console.log('SSH TARGETS:',JSON.stringify(report.sshTargets));
     assert.equal(sshOne.target.sessionAddress,firstSSH.address);assert.equal(sshOne.target.sessionPort,firstSSH.port);
     assert.equal(visible(handle(sshOne.terminal.handle)),0);assert.ok(visible(handle(sshTwo.terminal.handle)));
@@ -153,6 +153,24 @@ try{
     assert.equal(sshTwo.target.sessionAddress,secondSSH.address);assert.equal(sshTwo.target.sessionPort,secondSSH.port);assert.notEqual(sshOne.target.sessionKey,sshTwo.target.sessionKey);
     report.sshReceived=sshFixtures.map(f=>({address:f.address,port:f.port,received:f.received,errors:f.errors}));await screen('ssh-session-ip.png');
     console.log('PASS: two real SSH tabs display their own IP/port; switching tabs leaves the original address and exact input destination fixed');
+    const {ScheduleManager}=require('../electron/schedules.cjs'),{DeliveryBroker}=require('../electron/delivery.cjs');
+    const scheduler=new ScheduleManager({backend,broker:new DeliveryBroker(backend)});
+    const waitFor=async fn=>{for(let i=0;i<100;i++){if(fn())return;await delay(50);}assert.fail('Scheduled SSH delivery timed out');};
+    try{
+      firstSSH.received='';secondSSH.received='';
+      await scheduler.save({name:'SSH one',commands:['SCHED_ONE'],periodMs:180,characterInterval:1,start:true},sshOne.target);
+      await scheduler.save({name:'SSH two',commands:['SCHED_TWO'],periodMs:270,characterInterval:1,start:true},sshTwo.target);
+      const [one,two]=scheduler.snapshot();await waitFor(()=>scheduler.get(one.id).count>=2&&scheduler.get(two.id).count>=2);
+      await scheduler.action(one.id,'pause');await delay(150);const frozen=firstSSH.received,secondCount=scheduler.get(two.id).count;
+      await waitFor(()=>scheduler.get(two.id).count>secondCount);assert.equal(firstSSH.received,frozen);
+      assert.ok(firstSSH.received.includes('SCHED_ONE'));assert.ok(!firstSSH.received.includes('SCHED_TWO'));assert.ok(secondSSH.received.includes('SCHED_TWO'));assert.ok(!secondSSH.received.includes('SCHED_ONE'));
+      await scheduler.action(one.id,'start');execFileSync('taskkill',['/PID',String(sshOne.terminal.pid),'/T','/F'],{stdio:'ignore'});
+      await waitFor(()=>scheduler.get(one.id).status==='failed');const continuing=scheduler.get(two.id).count;await waitFor(()=>scheduler.get(two.id).count>continuing);
+      report.schedules={tasks:scheduler.snapshot(),received:stssh()};
+      console.log('PASS: independent scheduled commands reach two exact SSH tabs; pausing/closing one does not stop the other');
+    }finally{await scheduler.stopAll();backend.release(sshOne.target.id);}
+    function stssh(){return sshFixtures.map(f=>({address:f.address,received:f.received}));}
+
   }
   if(probe)await screen('terminal.png');console.log('RECEIVED:',JSON.stringify(await read()));
 }catch(error){report.error=error.stack;await screen('failure.png').catch(()=>{});throw error;}

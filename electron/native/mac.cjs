@@ -31,7 +31,8 @@ function createBackend(){
   function identity(pid){const buffer=Buffer.alloc(136);if(api.info(pid,3,0,buffer,buffer.length)!==136)throw new Error('目标进程已退出或无法访问');return {created:`${buffer.readBigUInt64LE(120)}:${buffer.readBigUInt64LE(128)}`,name:buffer.subarray(64,96).toString('utf8').split('\0')[0]||buffer.subarray(48,64).toString('utf8').split('\0')[0]};}
   function frontPid(){const p=Buffer.alloc(koffi.sizeof(psn)),pid=[0];return api.front(p)===0&&api.processPid(p,pid)===0?pid[0]:0;}
   function activate(pid){const p=Buffer.alloc(koffi.sizeof(psn));if(api.processFor(pid,p)!==0||api.activate(p)!==0)throw new Error('无法激活目标窗口，请检查系统权限');}
-  function clear(){for(const target of targets.values()){api.release(target.element);api.release(target.window);api.release(target.app);}targets.clear();}
+  function drop(id){const t=targets.get(id);if(t){api.release(t.element);api.release(t.window);api.release(t.app);targets.delete(id);}}
+  function clear(){for(const id of targets.keys())drop(id);}
   function validate(id){
     const t=targets.get(id);if(!t)throw new Error('目标绑定已失效，请重新选择');
     if(!api.trusted())throw new Error('请在系统设置中允许「命令定向」使用辅助功能');
@@ -56,7 +57,7 @@ function createBackend(){
       if(!window||!element)throw new Error('此区域没有提供可识别的输入控件，请选择实际文本框或终端区域');
       const app=api.application(pid),processInfo=identity(pid);api.timeout(element,.2);api.timeout(window,.2);api.timeout(app,.2);
       const name=string(app,'AXTitle')||processInfo.name,title=string(window,'AXTitle'),detail=string(element,'AXRoleDescription')||string(element,'AXRole');
-      clear();const id=randomUUID();targets.set(id,{id,pid,created:processInfo.created,element,window,app,name,title,detail});element=null;window=null;
+      for(const [key,target] of targets)if(!target.refs)drop(key);const id=randomUUID();targets.set(id,{id,pid,created:processInfo.created,element,window,app,name,title,detail});element=null;window=null;
       return {id,name,title,sessionName:string(targets.get(id).element,'AXTitle')||title||'未命名输入区',sessionKey:`PID ${pid} · 输入区 ${String(koffi.address(targets.get(id).element))}`,detail,strategy:'定向进程投递',verified:false};
     }finally{if(hit)api.release(hit);if(element)api.release(element);if(window)api.release(window);}
   }
@@ -66,6 +67,8 @@ function createBackend(){
     for(const down of [true,false]){const event=api.keyboard(null,key,down);if(!event)throw new Error('系统未能创建键盘事件');try{api.flags(event,0);if(units)api.unicode(event,units.length,units);api.post(t.pid,event);}finally{api.release(event);}}
   }
   return {
+    retain(id){const t=validate(id);t.refs=(t.refs||0)+1;},release(id){const t=targets.get(id);if(t&&--t.refs<=0)drop(id);},
+    deliveryInfo(id){const t=validate(id);return {key:`${t.pid}:${t.created}`,background:false};},
     hasTarget:id=>targets.has(id),setExcludedPids:pids=>{excluded=new Set([process.pid,...pids]);},permission:()=>api.trusted(),mouseDown:()=>api.button(0,0),escapeDown:()=>api.keyState(0,53),pick,
     async prepare(id){const t=validate(id),previous=frontPid();try{if(!focused(t)){activate(t.pid);api.action(t.window,attr('AXRaise'));api.set(t.window,attr('AXMain'),boolTrue);api.set(t.element,attr('AXFocused'),boolTrue);await delay(70);}if(!focused(t))throw new Error('无法聚焦指定输入区，未发送任何内容');return {previous,activated:frontPid()===t.pid&&previous!==t.pid};}catch(error){if(previous&&previous!==t.pid&&frontPid()===t.pid)try{activate(previous);}catch{}throw error;}},
     character(id,char){post(validate(id),char);},enter(id){post(validate(id),null,36);},
@@ -74,3 +77,4 @@ function createBackend(){
   };
 }
 module.exports={createBackend};
+

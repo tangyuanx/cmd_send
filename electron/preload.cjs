@@ -4,10 +4,12 @@ async function call(channel,...args){const result=await ipcRenderer.invoke(`desk
 function listen(channel,callback){const handler=(_event,data)=>callback(data);ipcRenderer.on(`desktop:${channel}`,handler);return ()=>ipcRenderer.removeListener(`desktop:${channel}`,handler);}
 contextBridge.exposeInMainWorld('desktop',{
   config:()=>call('config'),openFiles:()=>call('open'),saveFile:(id,text)=>call('save',id,text),closeFile:id=>call('close-file',id),
-  togglePin:()=>call('pin'),openAccessibility:()=>call('accessibility'),pickTarget:()=>call('pick'),cancelPick:()=>call('cancel-pick'),
+  togglePin:()=>call('pin'),openAccessibility:()=>call('accessibility'),pickTarget:options=>call('pick',options),cancelPick:()=>call('cancel-pick'),
   minimize:()=>call('window-minimize'),toggleMaximize:()=>call('window-maximize'),closeWindow:()=>call('window-close'),
   start:options=>call('start',options),pause:()=>call('pause'),resume:()=>call('resume'),stop:()=>call('stop'),closeResponse:(value,activeId)=>call('close-response',value,activeId),
   checkUpdate:()=>call('update-check'),downloadUpdate:()=>call('update-download'),installUpdate:()=>call('update-install'),openUpdatePage:()=>call('update-page'),onUpdate:callback=>listen('update',callback),
+  saveSchedule:value=>call('schedule-save',value),scheduleAction:(id,action)=>call('schedule-action',id,action),releaseScheduleDraft:()=>call('schedule-draft-release'),onSchedules:callback=>listen('schedules',callback),
   onQueue:callback=>listen('queue',callback),onClose:callback=>listen('request-close',callback),onOpen:callback=>listen('open-request',callback),onSave:callback=>listen('save-request',callback),onWindowState:callback=>listen('window-state',callback)
 });
+
 

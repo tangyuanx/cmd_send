@@ -4,15 +4,19 @@ const path=require('node:path');
 const {pathToFileURL}=require('node:url');
 const {FileStore}=require('./files.cjs');
 const {SendQueue}=require('./queue.cjs');
+const {DeliveryBroker}=require('./delivery.cjs');
+const {ScheduleManager}=require('./schedules.cjs');
 const {createBackend}=require('./native/index.cjs');
 const {ManualUpdates,RELEASE_PAGE}=require('./updates.cjs');
 const {restoreSession,saveSession}=require('./session.cjs');
 app.setName('命令定向');
 if(!app.requestSingleInstanceLock()){app.quit();}else{
-let win,backend,queue,picker,updates,sessionFile,restored,closing=false,approvedClose=false,closeReason=null,finalizingClose=false;
+let pickEpoch=0;
+let win,backend,queue,broker,schedules,picker,manualTarget=null,draftTarget=null,updates,sessionFile,restored,closing=false,approvedClose=false,closeReason=null,finalizingClose=false;
 const files=new FileStore();
 const page=pathToFileURL(path.join(__dirname,'../src/index.html')).href;
-function cancelPick(){if(!picker)return;clearInterval(picker.timer);picker.resolve({cancelled:true});picker=null;}
+function cancelPick(){pickEpoch++;if(!picker)return;clearInterval(picker.timer);picker.resolve({cancelled:true});picker=null;}
+function releaseDraft(){if(draftTarget){backend.release(draftTarget.id);draftTarget=null;}}
 function emit(channel,data){if(win&&!win.isDestroyed())win.webContents.send(channel,data);}
 function windowState(){return {maximized:win.isMaximized(),fullscreen:win.isFullScreen()};}
 function handle(name,fn){ipcMain.handle(name,async(event,...args)=>{
@@ -21,7 +25,7 @@ function handle(name,fn){ipcMain.handle(name,async(event,...args)=>{
 });}
 function unlocked(){if(queue?.run)throw new Error('发送期间不能修改文件或目标');}
 async function requestClose(reason='quit'){
-  if(closing)return;closing=true;closeReason=reason;cancelPick();await queue?.stop();emit('desktop:request-close',{reason});
+  if(closing)return;closing=true;closeReason=reason;cancelPick();await Promise.all([queue?.stop(),schedules?.stopAll()]);emit('desktop:request-close',{reason});
 }
 app.on('second-instance',()=>{if(win){if(win.isMinimized())win.restore();win.show();win.focus();}});
 app.whenReady().then(async()=>{
@@ -30,8 +34,9 @@ app.whenReady().then(async()=>{
   if(updater)updater.installDirectory=path.dirname(app.getPath('exe'));
   updates=new ManualUpdates({updater,version:app.getVersion(),packaged:app.isPackaged,
     fetchRelease:async url=>{const response=await net.fetch(url,{headers:{Accept:'application/vnd.github+json'}});if(!response.ok)throw new Error(`HTTP ${response.status}`);return response.json();}});
-  updates.on('state',state=>{if(state.phase==='error'&&closeReason==='update'){closing=false;approvedClose=false;closeReason=null;}emit('desktop:update',state);});
-  backend=createBackend();queue=new SendQueue(backend);queue.on('state',state=>emit('desktop:queue',state));
+  updates.on('state',state=>{if(state.phase==='error'&&closeReason==='update'){closing=false;approvedClose=false;closeReason=null;schedules?.reopen();}emit('desktop:update',state);});
+  backend=createBackend();broker=new DeliveryBroker(backend);queue=new SendQueue(broker.channel());queue.on('state',state=>emit('desktop:queue',state));
+  schedules=new ScheduleManager({backend,broker,file:path.join(app.getPath('userData'),'schedules.json')});await schedules.load();schedules.on('state',state=>emit('desktop:schedules',state));
   win=new BrowserWindow({width:1040,height:760,minWidth:680,minHeight:440,title:'命令定向',icon:path.join(__dirname,'../assets/icon.png'),backgroundColor:'#f7f7f8',show:false,frame:false,
     webPreferences:{preload:path.join(__dirname,'preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true}});
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -43,7 +48,7 @@ app.whenReady().then(async()=>{
   win.on('close',event=>{if(!approvedClose){event.preventDefault();void requestClose();}});
   win.on('closed',()=>{cancelPick();backend.dispose();win=null;app.quit();});
   for(const event of ['maximize','unmaximize','enter-full-screen','leave-full-screen'])win.on(event,()=>emit('desktop:window-state',windowState()));
-  handle('desktop:config',()=>({platform:process.platform,version:app.getVersion(),accessibility:backend.permission(),window:windowState(),update:updates.snapshot(),session:restored}));
+  handle('desktop:config',()=>({platform:process.platform,version:app.getVersion(),accessibility:backend.permission(),window:windowState(),update:updates.snapshot(),session:restored,schedules:schedules.snapshot()}));
   handle('desktop:window-minimize',()=>win.minimize());
   handle('desktop:window-maximize',()=>{
     if(win.isFullScreen())win.setFullScreen(false);
@@ -74,30 +79,39 @@ app.whenReady().then(async()=>{
     if(process.platform==='darwin')await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility');
     return backend.permission();
   });
-  handle('desktop:pick',()=>{
+  handle('desktop:pick',(options={})=>{
+    const scope=options?.scope==='schedule'?'schedule':'manual';if(closing)throw new Error('正在退出');
     unlocked();if(!backend.permission())throw new Error('请先在系统设置 → 隐私与安全性 → 辅助功能中允许「命令定向」，再重新拖选目标。');
     cancelPick();return new Promise((resolve,reject)=>{
-      const started=Date.now();picker={resolve,reject,timer:setInterval(()=>{
+      const started=Date.now(),epoch=pickEpoch;picker={resolve,reject,timer:setInterval(()=>{
         const current=picker;
         try{
           if(backend.escapeDown()||Date.now()-started>60000){cancelPick();return;}
           if(backend.mouseDown())return;
-          clearInterval(current.timer);picker=null;current.resolve(backend.pick());
+          clearInterval(current.timer);picker=null;current.resolve((async()=>{const target=await backend.pick();if(epoch!==pickEpoch){backend.retain(target.id);backend.release(target.id);return {cancelled:true};}backend.retain(target.id);if(scope==='schedule'){releaseDraft();draftTarget=target;}else{if(manualTarget)backend.release(manualTarget.id);manualTarget=target;}return target;})());
         }catch(error){clearInterval(current.timer);if(picker===current)picker=null;current.reject(error);}
       },30)};
     });
   });
   handle('desktop:cancel-pick',cancelPick);
+  handle('desktop:schedule-draft-release',releaseDraft);
+  handle('desktop:schedule-save',async value=>{
+    if(closing||picker)throw new Error('请先完成目标拾取或退出确认');
+    const targetId=value?.targetId;let target=null;
+    if(targetId){target=[manualTarget,draftTarget,...schedules.snapshot().map(j=>j.target)].find(t=>t?.id===targetId);if(!target)throw new Error('目标未绑定或已失效');target={...target,alias:typeof value.targetAlias==='string'?value.targetAlias.slice(0,80):target.alias};}
+    const result=await schedules.save(value,target);releaseDraft();return result;
+  });
+  handle('desktop:schedule-action',(id,action)=>{if(closing)throw new Error('正在退出');return schedules.action(id,action);});
   handle('desktop:start',options=>{if(closing)throw new Error('请先完成退出或升级确认');if(picker)throw new Error('请先完成目标拾取');return queue.start(options||{});});
   handle('desktop:pause',()=>queue.pause());handle('desktop:resume',()=>queue.resume());handle('desktop:stop',()=>queue.stop());
   handle('desktop:close-response',async(confirm,activeId)=>{
     if(finalizingClose)return;
-    if(confirm!==true){closing=false;closeReason=null;return;}
+    if(confirm!==true){closing=false;closeReason=null;schedules.reopen();return;}
     if(!closing)throw new Error('退出请求已取消');
     finalizingClose=true;
-    try{await queue.stop();await saveSession(sessionFile,files,activeId);approvedClose=true;
+    try{await Promise.all([queue.stop(),schedules.stopAll()]);await saveSession(sessionFile,files,activeId);approvedClose=true;
       if(closeReason==='update')updates.install();else win.close();
-    }catch(error){closing=false;approvedClose=false;closeReason=null;throw error;}
+    }catch(error){closing=false;approvedClose=false;closeReason=null;schedules.reopen();throw error;}
     finally{finalizingClose=false;}
   });
   const edit={label:'编辑',submenu:[{role:'undo',label:'撤销'},{role:'redo',label:'重做'},{type:'separator'},{role:'cut',label:'剪切'},{role:'copy',label:'复制'},{role:'paste',label:'粘贴'},{role:'selectAll',label:'全选'}]};

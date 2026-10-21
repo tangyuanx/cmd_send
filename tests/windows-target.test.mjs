@@ -143,3 +143,9 @@ test('background terminal permission failures propagate without foreground fallb
   await assert.rejects(backend.character(target.id,'X'),/权限.*停止.*不会重试/);assert.equal(state.messages.length,1);assert.equal(state.clicks,0);assert.deepEqual(state.keys,[]);
 });
 
+
+test('retained targets survive independent picks; aliases share a delivery resource and release separately',async()=>{
+  const {backend,state}=setup({className:'Edit'});const a=await backend.pick();backend.retain(a.id);state.element=20;const b=await backend.pick();backend.retain(b.id);
+  assert.equal(backend.hasTarget(a.id),true);assert.equal(backend.hasTarget(b.id),true);assert.notEqual(backend.deliveryInfo(a.id).key,backend.deliveryInfo(b.id).key);
+  const alias=await backend.pick();backend.retain(alias.id);assert.equal(backend.deliveryInfo(alias.id).key,backend.deliveryInfo(b.id).key);backend.release(b.id);assert.equal(backend.hasTarget(b.id),false);assert.equal(backend.hasTarget(a.id),true);assert.equal(backend.hasTarget(alias.id),true);backend.release(a.id);backend.release(alias.id);
+});

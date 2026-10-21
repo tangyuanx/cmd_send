@@ -132,3 +132,36 @@ svg{stroke-width:1.8}
 
 /* Preserve direct pointer dragging across the button and window edges. */
 #targetButton{user-select:none;touch-action:none}
+
+/* Scheduled sending follows the existing desktop controls and typography. */
+.schedules-button{width:100%;flex-wrap:wrap;gap:6px;padding:9px 5px;font-size:14px}
+#scheduleActiveCount{padding:0 5px;border-radius:4px;background:var(--selected);font-variant-numeric:tabular-nums}
+.schedules-dialog{width:900px;max-width:calc(100vw - 24px)}
+.schedules-dialog .dialog-heading{padding:18px 20px 14px}
+.schedules-layout{display:grid;grid-template-columns:260px minmax(0,1fr);border-top:1px solid var(--border);max-height:calc(100dvh - 190px);min-height:220px;overflow:auto}
+.schedule-sidebar{border-right:1px solid var(--border);background:var(--sidebar);padding:14px;overflow:auto}
+.schedule-sidebar>button{width:100%}
+#scheduleEmpty{color:var(--secondary);font-size:14px;text-align:center;margin:28px 0}
+.schedule-job{padding:14px 6px;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
+.schedule-job.selected{border-left:2px solid var(--text);padding-left:10px}
+.schedule-job strong{font-size:15px;font-weight:500}
+.schedule-job p{font-size:13px;color:var(--secondary);margin:5px 0;line-height:1.6}
+.schedule-job .schedule-job-state{color:var(--text);font-variant-numeric:tabular-nums}
+.schedule-job-actions{display:flex;gap:4px;margin-top:8px}
+.schedule-job-actions button{padding:5px 8px;font-size:13px;border:1px solid var(--border);background:var(--surface)}
+.schedule-form{display:flex;flex-direction:column;gap:8px;min-width:0;padding:16px 20px;overflow:auto}
+.schedule-form label{font-size:14px}.schedule-form>label:not(:first-child){margin-top:6px}
+.schedule-form input:not([type=checkbox]),.schedule-form select,.schedule-form textarea{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:7px 9px;min-width:0;font:inherit;font-size:14px}
+.schedule-form textarea{resize:vertical;min-height:82px;line-height:1.6;font-family:var(--app-font)}
+.schedule-target{justify-content:flex-start;white-space:normal;text-align:left;font-size:14px;min-height:40px}
+#scheduleTargetLabel{overflow-wrap:anywhere}
+.schedule-link{font-size:13px;color:var(--secondary);padding:3px 0;text-decoration:underline;text-underline-offset:3px;align-self:flex-start;white-space:normal;text-align:left}
+.schedule-label-row,.schedule-field-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.schedule-label-row{margin-top:5px}.schedule-period{display:flex;gap:6px;min-width:0}.schedule-period input{width:95px}.schedule-field-row>input:not([type=checkbox]){width:95px}
+#scheduleAtRow{display:flex;flex-direction:column;gap:8px}
+.schedule-note{font-size:13px;line-height:1.65;color:var(--secondary);margin:0 0 3px}
+.schedule-options{border-top:1px solid var(--border);margin-top:5px;padding-top:10px;font-size:14px}.schedule-options summary{cursor:pointer}.schedule-options .schedule-field-row{margin-top:10px}
+.schedule-error,.schedule-job .schedule-error{font-size:14px;color:var(--text);padding:8px 10px;border-left:2px solid var(--text);background:var(--subtle);margin:4px 0;line-height:1.6}
+.schedule-save-actions{display:flex;justify-content:flex-end;gap:8px;margin:9px 0 5px;flex-wrap:wrap}
+.schedules-dialog .dialog-footer{padding:12px 20px}
+@media(max-width:760px){.schedules-layout{grid-template-columns:205px minmax(0,1fr)}.schedule-form{padding:14px}.schedule-sidebar{padding:10px}.schedule-label-row{align-items:flex-start;flex-direction:column;gap:3px}}
