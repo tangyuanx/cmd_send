@@ -79,14 +79,14 @@ export function initSchedules({desktop,initial,getTarget,getWorkspace,getSource,
     const commands=workspace.flatMap(f=>linesOf(f.text).filter(l=>choice.get(f.id)?.has(l.index)).map(l=>l.raw));
     if(!commands.length)return;
     $('scheduleCommands').value=commands.join('\n');$('scheduleChooser').hidden=true;
-    importStatus(`已从工作区选择 ${commands.length} 条指令，尚未保存任务`);error();
+    importStatus(`已选择 ${commands.length} 条指令`);error();
   });
   async function edit(job=null){
     if(picking||busy)return;await desktop.releaseScheduleDraft?.();
     $('scheduleChooser').hidden=true;id=job?.id||null;target=job?.target||getTarget()||null;const s=getSettings();
     const source=job?null:getSource();
     $('scheduleName').value=job?.name||`定时任务 ${jobs.length+1}`;$('scheduleCommands').value=job?job.commands.join('\n'):(source?.commands||[]).join('\n');
-    importStatus(job?'当前为已保存的指令副本；读取可用主编辑器的内容替换。':source?.commands.length?sourceMessage(source,'已自动读取'):'可直接输入指令，或先在主编辑器选择内容后读取。');
+    importStatus(job?'':source?.commands.length?sourceMessage(source,'已自动读取'):'');
     $('scheduleMode').value=job?.mode||'interval';const period=job?.periodMs||5000;const unit=period%3600000===0?3600000:period%60000===0?60000:1000;
     $('scheduleUnit').value=String(unit);$('schedulePeriod').value=String(period/unit);
     const date=new Date(job?.at||Date.now()+60000);$('scheduleAt').value=new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,19);
@@ -108,7 +108,7 @@ export function initSchedules({desktop,initial,getTarget,getWorkspace,getSource,
   $('schedulesButton').addEventListener('click',async()=>{if(!desktop.saveSchedule){toast('当前环境不支持定时发送');return;}await edit(jobs.find(j=>j.id===id));if(!dialog.open)dialog.showModal();});
   $('scheduleNew').addEventListener('click',()=>void edit());$('scheduleMode').addEventListener('change',mode);$('scheduleImport').addEventListener('click',importCommands);
   $('scheduleUseTarget').addEventListener('click',async()=>{if(picking||busy)return;await desktop.releaseScheduleDraft?.();target=getTarget();renderTarget();error();});
-  $('scheduleCommands').addEventListener('input',()=>importStatus('指令已手动修改；读取将用主编辑器的当前行或选区替换。'));
+  $('scheduleCommands').addEventListener('input',()=>importStatus(''));
   $('scheduleForm').addEventListener('submit',async event=>{
     event.preventDefault();if(busy||picking)return;error();
     const commands=$('scheduleCommands').value.split(/\r?\n/).filter(c=>validCommand(c,getSettings().prefixes));

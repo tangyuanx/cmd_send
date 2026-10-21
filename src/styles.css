@@ -186,3 +186,5 @@ svg{stroke-width:1.8}
 .schedule-source-line:has(input:checked){background:var(--subtle)}
 .schedule-source-line:has(input:disabled){color:var(--secondary);cursor:default}
 .schedule-source-line input{flex:none;margin-top:3px}.schedule-source-number{min-width:24px;color:var(--secondary);text-align:right;font-variant-numeric:tabular-nums}
+
+.schedule-import-status:empty{display:none}
