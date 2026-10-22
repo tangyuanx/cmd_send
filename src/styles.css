@@ -133,38 +133,54 @@ svg{stroke-width:1.8}
 /* Preserve direct pointer dragging across the button and window edges. */
 #targetButton{user-select:none;touch-action:none}
 
-/* Scheduled sending follows the existing desktop controls and typography. */
-.schedules-button{width:100%;flex-wrap:wrap;gap:6px;padding:9px 5px;font-size:14px}
+/* Scheduled sending uses the existing desktop type, controls and palette. */
+.schedules-button{width:100%;gap:6px;padding:9px 5px;font-size:14px}
 #scheduleActiveCount{padding:0 5px;border-radius:4px;background:var(--selected);font-variant-numeric:tabular-nums}
-.schedules-dialog{width:900px;max-width:calc(100vw - 24px)}
+.schedules-dialog{width:920px;max-width:calc(100vw - 24px)}
 .schedules-dialog .dialog-heading{padding:18px 20px 14px}
-.schedules-layout{display:grid;grid-template-columns:260px minmax(0,1fr);border-top:1px solid var(--border);max-height:calc(100dvh - 190px);min-height:220px;overflow:auto}
-.schedule-sidebar{border-right:1px solid var(--border);background:var(--sidebar);padding:14px;overflow:auto}
+.schedules-layout{display:grid;grid-template-columns:264px minmax(0,1fr);border-top:1px solid var(--border);max-height:calc(100dvh - 150px);min-height:220px;overflow:hidden}
+.schedule-sidebar{min-height:0;border-right:1px solid var(--border);background:var(--sidebar);padding:14px;overflow:auto}
 .schedule-sidebar>button{width:100%}
 #scheduleEmpty{color:var(--secondary);font-size:14px;text-align:center;margin:28px 0}
-.schedule-job{padding:14px 6px;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
-.schedule-job.selected{border-left:2px solid var(--text);padding-left:10px}
-.schedule-job strong{font-size:15px;font-weight:500}
-.schedule-job p{font-size:13px;color:var(--secondary);margin:5px 0;line-height:1.6}
-.schedule-job .schedule-job-state{color:var(--text);font-variant-numeric:tabular-nums}
-.schedule-job-actions{display:flex;gap:4px;margin-top:8px}
-.schedule-job-actions button{padding:5px 8px;font-size:13px;border:1px solid var(--border);background:var(--surface)}
-.schedule-form{display:flex;flex-direction:column;gap:8px;min-width:0;padding:16px 20px;overflow:auto}
-.schedule-form label{font-size:14px}.schedule-form>label:not(:first-child){margin-top:6px}
-.schedule-form input:not([type=checkbox]),.schedule-form select,.schedule-form textarea{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:7px 9px;min-width:0;font:inherit;font-size:14px}
-.schedule-form textarea{resize:vertical;min-height:82px;line-height:1.6;font-family:var(--app-font)}
-.schedule-target{justify-content:flex-start;white-space:normal;text-align:left;font-size:14px;min-height:40px}
-#scheduleTargetLabel{overflow-wrap:anywhere}
-.schedule-link{font-size:13px;color:var(--secondary);padding:3px 0;text-decoration:underline;text-underline-offset:3px;align-self:flex-start;white-space:normal;text-align:left}
-.schedule-label-row,.schedule-field-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.schedule-label-row{margin-top:5px}.schedule-period{display:flex;gap:6px;min-width:0}.schedule-period input{width:95px}.schedule-field-row>input:not([type=checkbox]){width:95px}
-#scheduleAtRow{display:flex;flex-direction:column;gap:8px}
-.schedule-note{font-size:13px;line-height:1.65;color:var(--secondary);margin:0 0 3px}
-.schedule-options{border-top:1px solid var(--border);margin-top:5px;padding-top:10px;font-size:14px}.schedule-options summary{cursor:pointer}.schedule-options .schedule-field-row{margin-top:10px}
-.schedule-error,.schedule-job .schedule-error{font-size:14px;color:var(--text);padding:8px 10px;border-left:2px solid var(--text);background:var(--subtle);margin:4px 0;line-height:1.6}
-.schedule-save-actions{display:flex;justify-content:flex-end;gap:8px;margin:9px 0 5px;flex-wrap:wrap}
-.schedules-dialog .dialog-footer{padding:12px 20px}
-@media(max-width:760px){.schedules-layout{grid-template-columns:205px minmax(0,1fr)}.schedule-form{padding:14px}.schedule-sidebar{padding:10px}.schedule-label-row{align-items:flex-start;flex-direction:column;gap:3px}}
+.schedule-job{padding:14px 0;border-bottom:1px solid var(--border);min-width:0}
+.schedule-job.selected{box-shadow:inset 2px 0 var(--find-outline);padding-left:10px}
+.schedule-job-heading,.schedule-job-state,.schedule-job-footer{display:flex;align-items:center;gap:8px;min-width:0}
+.schedule-job-heading{justify-content:space-between}
+.schedule-job strong{font-size:15px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.schedule-job-state{margin:9px 0 6px;justify-content:space-between;font-size:13px;color:var(--secondary);font-variant-numeric:tabular-nums;flex-wrap:wrap;gap:4px}
+.schedule-job-state[data-status=scheduled]>span:first-child{color:var(--find-outline)}
+.schedule-next{color:var(--text);font-size:15px;white-space:nowrap}
+.schedule-job-footer{font-size:13px;color:var(--secondary);gap:4px}
+.schedule-job-target{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.schedule-job-footer button{font-size:13px;padding:3px 4px}
+.schedule-toggle{position:relative;flex:none;width:30px;height:18px;padding:0;border-radius:20px;background:var(--border);border:1px solid var(--secondary)}
+.schedule-toggle:before{content:'';position:absolute;left:2px;width:12px;height:12px;border-radius:50%;background:var(--secondary)}
+.schedule-toggle[aria-checked=true]{background:var(--find-outline);border-color:var(--find-outline)}
+.schedule-toggle[aria-checked=true]:before{left:14px;background:#fff}
+.schedule-toggle[aria-checked=true]:hover{background:var(--find-outline)}
+.schedule-form{min-height:0;display:flex;flex-direction:column;gap:16px;min-width:0;padding:18px 20px;overflow:auto}
+.schedule-field{display:flex;flex-direction:column;gap:7px;min-width:0}
+.schedule-form label{font-size:14px}
+.schedule-form input:not([type=checkbox]),.schedule-form select,.schedule-form textarea{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:8px 9px;min-width:0;font:inherit;font-size:14px;height:38px}
+.schedule-identity{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.schedule-form textarea{resize:vertical;min-height:115px;height:140px;line-height:1.6;font-family:var(--app-font);flex-shrink:0}
+.schedule-target{justify-content:flex-start;text-align:left;font-size:14px;height:38px;min-width:0;padding:7px 9px}
+#scheduleTargetLabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.schedule-timing{display:grid;grid-template-columns:120px minmax(0,1fr);gap:14px;align-items:start}
+.schedule-period{display:flex;gap:6px;min-width:0}.schedule-period input{width:100%;flex:1}.schedule-period select{width:80px}
+.schedule-at{display:flex;align-items:center;gap:3px;min-width:0}
+.schedule-at input[type=date]{flex:1;width:120px;padding:8px 3px}
+.schedule-at input[type=number]{width:36px;padding:8px 2px;text-align:center;appearance:textfield}
+.schedule-at input[type=number]::-webkit-inner-spin-button{appearance:none}
+.schedule-at span{color:var(--secondary)}
+.schedule-presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:-7px}
+.schedule-presets button{padding:5px 10px;font-size:13px;border:1px solid var(--border);background:var(--sidebar)}
+.schedule-options{border-top:1px solid var(--border);padding-top:12px;font-size:14px}.schedule-options summary{cursor:pointer}
+.schedule-field-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}.schedule-field-row>input:not([type=checkbox]){width:95px}
+.schedule-error,.schedule-job .schedule-error{font-size:13px;color:var(--text);padding:8px 10px;border-left:2px solid var(--text);background:var(--subtle);margin:0;line-height:1.6;overflow-wrap:anywhere}
+.schedule-save-actions{display:flex;justify-content:flex-end;gap:8px;margin:0;flex-wrap:wrap}
+@media(max-width:760px){.schedules-layout{grid-template-columns:210px minmax(0,1fr)}.schedule-form{padding:14px;gap:14px}.schedule-sidebar{padding:10px}.schedule-timing{grid-template-columns:100px minmax(0,1fr);gap:8px}.schedule-timing:has(#scheduleAtRow:not([hidden])){grid-template-columns:1fr}.schedule-at input[type=date]{width:110px}}
+@media(max-width:540px){.schedules-layout{grid-template-columns:1fr}.schedule-sidebar{max-height:180px;border-right:0;border-bottom:1px solid var(--border)}.schedule-identity{gap:8px}}
 
 /* Formatted release notes retain the update dialog's font and scroll area. */
 .update-notes{white-space:normal;overflow-wrap:anywhere}
@@ -177,14 +193,3 @@ svg{stroke-width:1.8}
 .update-notes pre{white-space:pre-wrap;background:var(--subtle);padding:8px;border-radius:4px}.update-notes pre code{padding:0;background:none}
 .update-notes blockquote{border-left:2px solid var(--border);padding-left:10px}.update-notes hr{border:0;border-top:1px solid var(--border);margin:12px 0}
 .update-notes table{border-collapse:collapse;width:100%;margin:9px 0}.update-notes th,.update-notes td{border:1px solid var(--border);padding:4px 6px;text-align:left}
-
-.schedule-import-status{overflow-wrap:anywhere;min-height:22px}.schedule-import-status.is-error{color:var(--text);border-left:2px solid var(--text);padding:6px 9px;background:var(--subtle)}
-
-.schedule-chooser{border:1px solid var(--border);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:8px}
-.schedule-source-lines{max-height:240px;overflow:auto;border-block:1px solid var(--border)}
-.schedule-source-line{display:flex;align-items:flex-start;gap:9px;padding:7px 4px;cursor:pointer;white-space:pre-wrap;overflow-wrap:anywhere}
-.schedule-source-line:has(input:checked){background:var(--subtle)}
-.schedule-source-line:has(input:disabled){color:var(--secondary);cursor:default}
-.schedule-source-line input{flex:none;margin-top:3px}.schedule-source-number{min-width:24px;color:var(--secondary);text-align:right;font-variant-numeric:tabular-nums}
-
-.schedule-import-status:empty{display:none}
