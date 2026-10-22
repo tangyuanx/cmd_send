@@ -160,12 +160,13 @@ try{
       firstSSH.received='';secondSSH.received='';
       await scheduler.save({name:'SSH one',commands:['SCHED_ONE'],periodMs:180,characterInterval:1,start:true},sshOne.target);
       await scheduler.save({name:'SSH two',commands:['SCHED_TWO'],periodMs:270,characterInterval:1,start:true},sshTwo.target);
-      const [one,two]=scheduler.snapshot();await waitFor(()=>scheduler.get(one.id).count>=2&&scheduler.get(two.id).count>=2);
-      await scheduler.action(one.id,'pause');await delay(150);const frozen=firstSSH.received,secondCount=scheduler.get(two.id).count;
-      await waitFor(()=>scheduler.get(two.id).count>secondCount);assert.equal(firstSSH.received,frozen);
+      const [one,two]=scheduler.snapshot();await scheduler.action(one.id,'pause');
+      await waitFor(()=>scheduler.get(two.id).status==='completed');assert.equal(firstSSH.received,'');assert.equal(scheduler.get(two.id).count,1);
+      await scheduler.action(one.id,'start');await waitFor(()=>scheduler.get(one.id).status==='completed');await delay(350);
+      assert.equal(scheduler.get(one.id).count,1);assert.equal(scheduler.get(two.id).count,1);
       assert.ok(firstSSH.received.includes('SCHED_ONE'));assert.ok(!firstSSH.received.includes('SCHED_TWO'));assert.ok(secondSSH.received.includes('SCHED_TWO'));assert.ok(!secondSSH.received.includes('SCHED_ONE'));
       await scheduler.action(one.id,'start');execFileSync('taskkill',['/PID',String(sshOne.terminal.pid),'/T','/F'],{stdio:'ignore'});
-      await waitFor(()=>scheduler.get(one.id).status==='failed');const continuing=scheduler.get(two.id).count;await waitFor(()=>scheduler.get(two.id).count>continuing);
+      await scheduler.action(two.id,'start');await waitFor(()=>scheduler.get(one.id).status==='failed'&&scheduler.get(two.id).count===2);
       report.schedules={tasks:scheduler.snapshot(),received:stssh()};
       console.log('PASS: independent scheduled commands reach two exact SSH tabs; pausing/closing one does not stop the other');
     }finally{await scheduler.stopAll();backend.release(sshOne.target.id);}

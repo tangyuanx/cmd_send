@@ -6,10 +6,10 @@ const {SendQueue}=require('./queue.cjs');
 
 function configuration(value){
   if(!value||typeof value!=='object')throw new Error('任务配置无效');
-  const {commands,mode='interval',periodMs=1000,at=null,commandInterval=500,characterInterval=2}=value;
+  const {commands,mode='countdown',periodMs=1000,at=null,commandInterval=500,characterInterval=2}=value;
   if(!Array.isArray(commands)||!commands.length||commands.length>10000||commands.some(c=>typeof c!=='string'||!c.trim()||c.length>100000||/[\r\n\0]/u.test(c))||commands.reduce((n,c)=>n+Buffer.byteLength(c),0)>20*1024*1024)throw new Error('请填写有效指令，每行一条');
-  if(!['interval','once'].includes(mode))throw new Error('请选择定时方式');
-  if(!Number.isInteger(periodMs)||periodMs<50||periodMs>86400000)throw new Error('循环间隔需在 50 ms 到 24 小时之间');
+  if(!['countdown','once'].includes(mode))throw new Error('请选择定时方式');
+  if(!Number.isInteger(periodMs)||periodMs<50||periodMs>86400000)throw new Error('倒计时需在 50 ms 到 24 小时之间');
   if(mode==='once'&&(!Number.isSafeInteger(at)||at<=0||at>8640000000000000))throw new Error('请选择有效的发送时间');
   if(!Number.isInteger(commandInterval)||commandInterval<50||commandInterval>600000||!Number.isInteger(characterInterval)||characterInterval<0||characterInterval>1000)throw new Error('命令或字符间隔无效');
   return {name:String(value.name||'定时任务').trim().slice(0,80)||'定时任务',commands:[...commands],mode,periodMs,at:mode==='once'?at:null,commandInterval,characterInterval,enter:value.enter!==false};
@@ -25,7 +25,7 @@ class ScheduleManager extends EventEmitter {
     if(!this.file)return;
     let data;try{data=JSON.parse(await fs.readFile(this.file,'utf8'));}catch{return;}
     for(const item of (Array.isArray(data)?data:[]).slice(0,50)){
-      try{const config=configuration(item);const id=typeof item.id==='string'?item.id:randomUUID();this.jobs.set(id,this.entry(id,config,null,String(item.targetLabel||'')));}catch{}
+      try{const config=configuration({...item,mode:item.mode==='interval'?'countdown':item.mode});const id=typeof item.id==='string'?item.id:randomUUID();this.jobs.set(id,this.entry(id,config,null,String(item.targetLabel||'')));}catch{}
     }
   }
   entry(id,config,target,targetLabel=''){
@@ -71,10 +71,7 @@ class ScheduleManager extends EventEmitter {
   async tick(j){
     if(!j.enabled||this.closing)return;
     const now=this.clock(),due=j.nextAt;if(now<due){this.schedule(j);return;}
-    if(now-due>3000){
-      if(j.config.mode==='once'){j.enabled=false;j.status='missed';j.nextAt=null;j.error='已错过指定时间，请重新设置；未补发';this.publish();return;}
-      j.nextAt=due+(Math.floor((now-due)/j.config.periodMs)+1)*j.config.periodMs;this.schedule(j);this.publish();return;
-    }
+    if(now-due>3000){j.enabled=false;j.status='missed';j.nextAt=null;j.error='已错过发送时间，请重新设置；未补发';this.publish();return;}
     const generation=j.generation;j.nextAt=null;j.status='waiting';
     const channel=this.broker.channel({onWait:()=>{if(j.generation===generation){j.status='waiting';this.publish();}},onActive:()=>{if(j.generation===generation){j.status='running';this.publish();}}});
     const queue=new SendQueue(channel);j.queue=queue;this.publish();
@@ -83,8 +80,7 @@ class ScheduleManager extends EventEmitter {
       j.queue=null;
       if(event.type==='completed'){
         j.count++;j.lastAt=this.clock();
-        if(j.config.mode==='once'){j.enabled=false;j.status='completed';j.nextAt=null;}
-        else if(j.enabled){j.status='scheduled';j.nextAt=due+(Math.floor(Math.max(0,this.clock()-due)/j.config.periodMs)+1)*j.config.periodMs;this.schedule(j);}
+        j.enabled=false;j.status='completed';j.nextAt=null;
       }else if(event.type==='failed'){j.enabled=false;j.status='failed';j.error=event.error+'；已停止，不自动重试';j.nextAt=null;}
       this.publish();
     });

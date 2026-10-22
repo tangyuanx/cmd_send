@@ -39,38 +39,49 @@ test('cancelling pending prepare waits for it and restores before granting foreg
 test('finish failure still waits for native cleanup before another command',async()=>{
  const f=fixture(false),gate=deferred();f.backend.prepare=async()=>{await gate.promise;return {};};let count=0;f.backend.finish=()=>{if(count++===0)throw Error('finish failed');};const a=f.broker.channel();const p=a.prepare('A');const rejected=assert.rejects(p,/取消/);await delay(2);const finish=a.finish('A');const finishError=assert.rejects(finish,/finish failed/);await delay(5);assert.equal(f.broker.held.size,2);gate.resolve();await rejected;await finishError;assert.equal(f.broker.held.size,0);
 });
-test('multiple schedules freeze commands, pause/delete only their own task, and release refs',async()=>{
- const f=fixture(),{manager:m}=f;try{
-  const commands=['alpha'];const a=await f.save('A','A',{commands,periodMs:60});commands[0]='mutated';const b=await f.save('B','B',{periodMs:95});
-  await until(()=>m.get(a).count>=2&&m.get(b).count>=2);await m.action(a,'pause');const count=m.get(a).count,bc=m.get(b).count,writes=f.writes.filter(x=>x[0]==='A').length;
-  await until(()=>m.get(b).count>bc);assert.equal(m.get(a).count,count);assert.equal(f.writes.filter(x=>x[0]==='A').length,writes);assert.ok(!f.writes.some(x=>x[1]==='m'));
-  await m.action(a,'delete');assert.equal(f.refs.get('A'),0);assert.equal(f.refs.get('B'),1);await m.action(b,'pause');await m.action(b,'start');await until(()=>m.get(b).count>bc+1);
+test('countdowns send one frozen round to each independent target, pause and restart reset the wait',async()=>{
+ const f=fixture(),m=f.manager;
+ try{
+  const commands=['alpha'];const a=await f.save('A','A',{commands,periodMs:60});commands[0]='mutated';const b=await f.save('B','B',{periodMs:160});
+  await m.action(b,'pause');await until(()=>m.get(a).status==='completed');
+  await delay(180);assert.equal(m.get(a).count,1);assert.equal(m.get(a).enabled,false);assert.equal(m.get(b).count,0);
+  assert.equal(f.writes.filter(x=>x[0]==='A').map(x=>x[1]).join(''),'alpha\n');
+  await m.action(b,'start');assert.ok(m.get(b).nextAt>Date.now());await until(()=>m.get(b).status==='completed');await delay(200);assert.equal(m.get(b).count,1);
+  await m.action(a,'delete');assert.equal(f.refs.get('A'),0);assert.equal(f.refs.get('B'),1);
  }finally{await m.stopAll();}
 });
-test('a failed/closed target stops only its own task and never retries delivered input',async()=>{
- const f=fixture(),m=f.manager;try{const a=await f.save('A'),b=await f.save('B');await until(()=>m.get(a).count&&m.get(b).count);f.dead.add('A');await until(()=>m.get(a).status==='failed');const writes=f.writes.filter(x=>x[0]==='A').length,bc=m.get(b).count;await until(()=>m.get(b).count>bc);assert.equal(f.writes.filter(x=>x[0]==='A').length,writes);assert.match(m.get(a).error,/关闭|有效/);assert.equal(m.get(a).enabled,false);}finally{await m.stopAll();}
+test('a closed target stops only its own countdown and never retries',async()=>{
+ const f=fixture(),m=f.manager;try{
+  const a=await f.save('A'),b=await f.save('B');f.dead.add('A');await until(()=>m.get(a).status==='failed'&&m.get(b).status==='completed');
+  await delay(100);assert.equal(m.get(a).count,0);assert.equal(m.get(b).count,1);assert.equal(m.get(a).enabled,false);assert.match(m.get(a).error,/关闭|有效/);
+ }finally{await m.stopAll();}
 });
-test('one-shot fires once, late timers skip missed rounds instead of bursting',async()=>{
+test('absolute and countdown schedules fire once and both reject missed times without catch-up',async()=>{
  const f=fixture(),m=f.manager;try{const once=await f.save('once','A',{mode:'once',at:Date.now()+60});await until(()=>m.get(once).status==='completed');await delay(100);assert.equal(m.get(once).count,1);}finally{await m.stopAll();}
  let now=10000;const f2=fixture();const m2=new ScheduleManager({backend:f2.backend,broker:f2.broker,clock:()=>now,setTimer:()=>1,clearTimer:()=>{}});
- try{await m2.save({commands:['A'],periodMs:100,start:true},{id:'A',name:'A'});const j=[...m2.jobs.values()][0];now+=20000;await m2.tick(j);assert.equal(j.count,0);assert.ok(j.nextAt>now);assert.equal(f2.writes.length,0);
- await m2.save({commands:['B'],mode:'once',at:now+100,start:true},{id:'B',name:'B'});const once=[...m2.jobs.values()][1];now+=5000;await m2.tick(once);assert.equal(once.status,'missed');assert.equal(f2.writes.length,0);}finally{await m2.stopAll();}
+ try{
+  for(const mode of ['countdown','once']){await m2.save({commands:[mode],mode,periodMs:100,at:now+100,start:true},{id:mode,name:mode});}
+  now+=20000;for(const j of m2.jobs.values()){await m2.tick(j);assert.equal(j.count,0);assert.equal(j.nextAt,null);assert.equal(j.enabled,false);assert.equal(j.status,'missed');}assert.equal(f2.writes.length,0);
+ }finally{await m2.stopAll();}
 });
-test('persist configurations only: restart never restores native handles or armed tasks',async()=>{
+test('restart migrates old intervals to paused one-shot countdowns, never restoring target handles',async()=>{
  const f=fixture(),dir=await fs.mkdtemp(path.join(os.tmpdir(),'cmd-schedule-')),file=path.join(dir,'schedules.json');const m=new ScheduleManager({backend:f.backend,broker:f.broker,file});
- try{await m.save({name:'saved',commands:['echo test'],start:true},{id:'NEVER-PERSIST-HWND',name:'串口一'});const text=await fs.readFile(file,'utf8');assert.ok(!text.includes('NEVER-PERSIST'));const restored=new ScheduleManager({backend:f.backend,broker:f.broker,file});await restored.load();const [j]=restored.snapshot();assert.equal(j.target,null);assert.equal(j.enabled,false);assert.equal(j.status,'unbound');assert.deepEqual(j.commands,['echo test']);await assert.rejects(restored.action(j.id,'start'),/重新绑定/);}finally{await m.stopAll();await fs.rm(dir,{recursive:true,force:true});}
+ try{
+  await m.save({name:'saved',commands:['echo test'],start:true},{id:'NEVER-PERSIST-HWND',name:'串口一'});const text=await fs.readFile(file,'utf8');assert.ok(!text.includes('NEVER-PERSIST'));
+  const old=JSON.parse(text);old[0].mode='interval';old[0].periodMs=12000;await fs.writeFile(file,JSON.stringify(old));
+  const restored=new ScheduleManager({backend:f.backend,broker:f.broker,file});await restored.load();const [j]=restored.snapshot();assert.equal(j.target,null);assert.equal(j.enabled,false);assert.equal(j.status,'unbound');assert.equal(j.mode,'countdown');assert.equal(j.periodMs,12000);assert.deepEqual(j.commands,['echo test']);await assert.rejects(restored.action(j.id,'start'),/重新绑定/);
+ }finally{await m.stopAll();await fs.rm(dir,{recursive:true,force:true});}
 });
-test('edits stop old queue, snapshot replacement and independent target references',async()=>{
+test('edits stop old queues and retain independent target references',async()=>{
  const f=fixture(),m=f.manager;try{const a=await f.save('AAA','A',{characterInterval:30});const b=await f.save('B','A',{periodMs:200});assert.equal(f.refs.get('A'),2);await until(()=>m.get(a).status==='running');await m.save({id:a,name:'changed',commands:['C'],start:false},{id:'C',name:'C'});assert.equal(f.refs.get('A'),1);assert.equal(f.refs.get('C'),1);assert.equal(m.get(a).status,'paused');assert.equal(m.get(b).enabled,true);assert.equal(f.broker.waiters.length,0);}finally{await m.stopAll();}
 });
-test('configuration rejects malformed/unsafe commands and schedule ranges',async()=>{
- for(const value of [{commands:[]},{commands:['a\nb']},{commands:['a\0']},{commands:['a'],periodMs:0},{commands:['a'],mode:'bad'},{commands:['a'],mode:'once',at:NaN},{commands:['a'],characterInterval:-1}])assert.throws(()=>configuration(value));
+test('configuration rejects malformed commands, recurring mode and invalid schedule ranges',async()=>{
+ for(const value of [{commands:[]},{commands:['a\nb']},{commands:['a\0']},{commands:['a'],periodMs:0},{commands:['a'],mode:'interval'},{commands:['a'],mode:'bad'},{commands:['a'],mode:'once',at:NaN},{commands:['a'],characterInterval:-1}])assert.throws(()=>configuration(value));
  const f=fixture();await assert.rejects(f.manager.save({id:{},commands:['A']}),/标识/);await assert.rejects(f.save('past','A',{mode:'once',at:1}),/晚于/);assert.equal(f.manager.jobs.size,0);
 });
-
-test('foreground schedules serialize full commands and never overlap slow rounds',async()=>{
- const f=fixture(false),m=f.manager;try{const a=await f.save('AAAA','A',{periodMs:50,characterInterval:15});const b=await f.save('BBBB','B',{periodMs:50,characterInterval:15});await until(()=>m.get(a).count>=2&&m.get(b).count>=2);await m.action(a,'pause');await m.action(b,'pause');
- let target=null,line='';for(const [id,c] of f.writes){if(target===null)target=id;assert.equal(id,target,'a command must keep its foreground resource');if(c==='\n'){assert.equal(line,target.repeat(4));target=null;line='';}else line+=c;}assert.equal(f.broker.held.size,0);assert.equal(f.broker.waiters.length,0);
+test('foreground countdowns serialize full commands and complete without repeating',async()=>{
+ const f=fixture(false),m=f.manager;try{const a=await f.save('AAAA','A',{periodMs:50,characterInterval:15});const b=await f.save('BBBB','B',{periodMs:50,characterInterval:15});await until(()=>m.get(a).status==='completed'&&m.get(b).status==='completed');await delay(120);
+ let target=null,line='';for(const [id,c] of f.writes){if(target===null)target=id;assert.equal(id,target,'a command must keep its foreground resource');if(c==='\n'){assert.equal(line,target.repeat(4));target=null;line='';}else line+=c;}assert.equal(m.get(a).count,1);assert.equal(m.get(b).count,1);assert.equal(f.broker.held.size,0);assert.equal(f.broker.waiters.length,0);
  }finally{await m.stopAll();}
 });
 test('failed persistence rolls back an edit safely; close still stops all tasks',async()=>{
