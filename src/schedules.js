@@ -10,6 +10,12 @@ function remaining(at){const seconds=Math.max(0,Math.ceil((at-Date.now())/1000))
 export function initSchedules({desktop,initial,getTarget,getSource,getSettings,canPick,toast}){
   let jobs=initial,id=null,target=null,picking=false,busy=false,ticker=null;
   const dialog=$('schedulesDialog');
+  function expandOptions(expanded){
+    $('scheduleOptionsToggle').setAttribute('aria-expanded',String(expanded));$('scheduleOptionsContent').inert=!expanded;
+  }
+  $('scheduleOptionsToggle').addEventListener('click',()=>expandOptions($('scheduleOptionsToggle').getAttribute('aria-expanded')!=='true'));
+  // Reveal invalid controls before the browser focuses them during validation.
+  $('scheduleForm').addEventListener('invalid',event=>{if($('scheduleOptionsContent').contains(event.target))expandOptions(true);},true);
   function error(message=''){$('scheduleError').textContent=message;$('scheduleError').hidden=!message;}
   function renderTarget(){$('scheduleTargetLabel').textContent=picking?'拖到目标后释放':target?shortLabel(target):'选择目标';$('scheduleTarget').title=picking?'Esc 取消':label(target);}
   function setDate(date){
