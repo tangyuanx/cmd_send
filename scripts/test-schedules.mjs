@@ -30,7 +30,12 @@ try{
  await page.waitForFunction(()=>document.querySelector('[data-next-at]')?.textContent.includes('后发送'));
  const before=await row('目标 B').locator('.schedule-next').textContent();await page.waitForFunction(previous=>[...document.querySelectorAll('.schedule-job')].find(n=>n.querySelector('strong').textContent==='目标 B').querySelector('.schedule-next').textContent!==previous,before);
  assert.equal(await row('目标 B').getByRole('switch').getAttribute('aria-checked'),'true');
- await row('目标 B').getByRole('switch').click();assert.equal(await row('目标 B').getByRole('switch').getAttribute('aria-checked'),'false');
+ await row('目标 B').getByRole('switch').click();
+ // Pausing crosses the preload bridge and persists before the renderer updates.
+ // Wait for the actual state transition rather than assuming click awaits IPC.
+ await waitJob('目标 B',j=>!j.enabled&&j.status==='paused');
+ await page.waitForFunction(()=>[...document.querySelectorAll('.schedule-job')].find(n=>n.querySelector('strong').textContent==='目标 B')?.querySelector('[role=switch]')?.getAttribute('aria-checked')==='false');
+ assert.equal(await row('目标 B').getByRole('switch').getAttribute('aria-checked'),'false');
  await waitJob('目标 A',j=>j.status==='completed');assert.equal((await jobs()).find(j=>j.name==='目标 A').count,1);assert.equal((await jobs()).find(j=>j.name==='目标 B').count,0);
  // A restarted countdown sends one complete round, still to its own target.
  await row('目标 B').getByRole('button',{name:'编辑',exact:true}).click();await page.locator('#schedulePeriod').fill('1');await page.locator('#scheduleStart').click();await waitJob('目标 B',j=>j.status==='completed');
