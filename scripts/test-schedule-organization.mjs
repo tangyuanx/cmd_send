@@ -13,6 +13,17 @@ const row=name=>page.locator('.schedule-job').filter({has:page.locator('strong',
 const order=()=>page.locator('.schedule-job strong').allTextContents();
 const state=()=>app.evaluate(()=>({jobs:global.scheduleManager.snapshot(),groups:global.scheduleManager.groupSnapshot(),writes:global.searchCaptures.deliveries}));
 async function settled(){await page.waitForFunction(()=>!document.getElementById('scheduleNew').disabled);}
+async function dragTaskTo(source,destination){
+ // Start dragging before any target auto-scroll. A single dragTo jump can
+ // scroll a Windows dialog after mouse-down without producing dragstart.
+ await settled();await destination.scrollIntoViewIfNeeded();await source.scrollIntoViewIfNeeded();
+ assert.equal(await source.isEnabled(),true);assert.equal(await source.evaluate(el=>el.draggable),true);
+ const a=await source.boundingBox(),offset=await page.evaluate(()=>globalThis.scheduleDragEvents.length);
+ await page.mouse.move(a.x+a.width/2,a.y+a.height/2);await page.mouse.down();await page.mouse.move(a.x+a.width/2+14,a.y+a.height/2,{steps:4});
+ await page.waitForFunction(offset=>globalThis.scheduleDragEvents.slice(offset).some(event=>event.type==='dragstart'),offset);
+ await destination.scrollIntoViewIfNeeded();const b=await destination.boundingBox(),x=b.x+b.width/2,y=b.y+b.height/2;
+ await page.mouse.move(x,y,{steps:16});await page.mouse.move(x+1,y);await page.mouse.up();
+}
 async function createGroup(name){await page.locator('#scheduleGroupNew').click();await page.locator('#scheduleGroupName').fill(name);await page.getByRole('button',{name:'保存组名',exact:true}).click();await page.locator('#scheduleGroupForm').waitFor({state:'hidden'});}
 async function saveTask(name,group='',period='60'){
  await page.locator('#scheduleNew').click();const picks=await app.evaluate(()=>global.searchCaptures.picks);await dragTarget(page,'#scheduleTarget');await page.waitForFunction(expected=>document.getElementById('scheduleTargetLabel').textContent===expected,`测试目标 ${picks+1}`);
@@ -29,7 +40,7 @@ try{
  await page.mouse.move(handle.x+handle.width/2,handle.y+handle.height/2);await page.mouse.down();await page.mouse.move(target.x+50,target.y+5,{steps:8});await page.keyboard.press('Escape');await page.mouse.up();await page.waitForFunction(offset=>globalThis.scheduleDragEvents.slice(offset).some(event=>event.type==='dragend'),traceOffset);assert.deepEqual(await order(),before);
  console.log('PASS: cancelled drag preserves order');
  await createGroup('设备组');const group=(await state()).groups[0],section=page.locator(`[data-group="${group.id}"]`);
- await row('A').locator('[data-drag-handle]').dragTo(section.locator('.schedule-group-empty'));await page.waitForFunction(groupId=>[...document.querySelectorAll('.schedule-job')].find(node=>node.querySelector('strong').textContent==='A')?.closest('[data-group]')?.dataset.group===groupId,group.id);await settled();assert.equal((await state()).jobs.find(j=>j.name==='A').groupId,group.id);
+ await dragTaskTo(row('A').locator('[data-drag-handle]'),section.locator('.schedule-group-empty'));await page.waitForFunction(groupId=>[...document.querySelectorAll('.schedule-job')].find(node=>node.querySelector('strong').textContent==='A')?.closest('[data-group]')?.dataset.group===groupId,group.id);await settled();assert.equal((await state()).jobs.find(j=>j.name==='A').groupId,group.id);
  await row('B').getByRole('button',{name:'编辑',exact:true}).click();await page.locator('#scheduleGroup').selectOption(group.id);await page.locator('#scheduleSave').click();await settled();assert.equal(await section.locator('.schedule-job').count(),2);
  await page.getByRole('button',{name:'编辑分组 设备组',exact:true}).click();await page.locator('#scheduleGroupName').fill('设备联测');await page.getByRole('button',{name:'保存组名',exact:true}).click();await page.locator('#scheduleGroupForm').waitFor({state:'hidden'});
  assert.equal(await page.locator('#scheduleGroup option:checked').textContent(),'设备联测');
