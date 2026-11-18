@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('desktop',{
   start:options=>call('start',options),pause:()=>call('pause'),resume:()=>call('resume'),stop:()=>call('stop'),closeResponse:(value,activeId)=>call('close-response',value,activeId),
   checkUpdate:()=>call('update-check'),downloadUpdate:()=>call('update-download'),installUpdate:()=>call('update-install'),openUpdatePage:()=>call('update-page'),onUpdate:callback=>listen('update',callback),
   saveSchedule:value=>call('schedule-save',value),scheduleAction:(id,action)=>call('schedule-action',id,action),releaseScheduleDraft:()=>call('schedule-draft-release'),onSchedules:callback=>listen('schedules',callback),
+  moveSchedule:(id,position)=>call('schedule-move',id,position),saveScheduleGroup:value=>call('schedule-group-save',value),scheduleGroupAction:(id,action)=>call('schedule-group-action',id,action),onScheduleGroups:callback=>listen('schedule-groups',callback),
   onQueue:callback=>listen('queue',callback),onClose:callback=>listen('request-close',callback),onOpen:callback=>listen('open-request',callback),onSave:callback=>listen('save-request',callback),onWindowState:callback=>listen('window-state',callback)
 });
 

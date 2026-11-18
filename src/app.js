@@ -149,7 +149,7 @@ config=await desktop.config();renderWindowState(config.window);document.body.dat
 renderUpdate(config.update);files=(config.session?.files||[]).map(file=>buffer(file.name,file.text,file));activeId=config.session?.activeId||files[0]?.id||null;
 if(config.platform==='darwin')document.querySelectorAll('kbd,.rail-shortcuts>span').forEach(el=>el.innerHTML=el.innerHTML.replaceAll('Ctrl','⌘'));
 loadBuffer();
-initSchedules({desktop,initial:config.schedules||[],getTarget:()=>target,getSource:()=>{
+initSchedules({desktop,initial:config.schedules||[],initialGroups:config.scheduleGroups||[],getTarget:()=>target,getSource:()=>{
  const f=active();if(!f)return null;
  syncSelection();
  // Scheduled drafts use exactly the caret line, never a later valid command.

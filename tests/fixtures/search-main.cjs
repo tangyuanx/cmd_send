@@ -12,12 +12,16 @@ app.whenReady().then(async()=>{
    const backend={hasTarget:id=>targets.has(id),retain:()=>{},release:()=>{},deliveryInfo:id=>({key:id,background:true}),prepare:async()=>({}),finish:()=>{},character:(id,c)=>global.searchCaptures.deliveries.push([id,c]),enter:id=>global.searchCaptures.deliveries.push([id,'\n'])};
    schedules=new ScheduleManager({backend,broker:new DeliveryBroker(backend),file:path.join(fixture.profile,'schedules.json')});await schedules.load();global.scheduleManager=schedules;
    schedules.on('state',value=>win.webContents.send('fixture:schedules',value));
+   schedules.on('groups',value=>win.webContents.send('fixture:schedule-groups',value));
  }
  global.setUpdateFixture=value=>{fixture.config.update=value;win.webContents.send('fixture:update',value);};
  ipcMain.handle('fixture:update-check',()=>fixture.config.update);
- ipcMain.handle('fixture:config',()=>({...fixture.config,schedules:schedules?.snapshot()||[]}));
+ ipcMain.handle('fixture:config',()=>({...fixture.config,schedules:schedules?.snapshot()||[],scheduleGroups:schedules?.groupSnapshot()||[]}));
  ipcMain.handle('fixture:schedule-save',(_event,value)=>schedules.save(value,targets.get(value.targetId)));
  ipcMain.handle('fixture:schedule-action',(_event,id,action)=>schedules.action(id,action));
+ ipcMain.handle('fixture:schedule-move',(_event,id,position)=>schedules.move(id,position));
+ ipcMain.handle('fixture:schedule-group-save',(_event,value)=>schedules.saveGroup(value));
+ ipcMain.handle('fixture:schedule-group-action',(_event,id,action)=>schedules.groupAction(id,action));
  ipcMain.handle('fixture:schedule-draft-release',()=>{});
 
  ipcMain.handle('fixture:pick',()=>{global.searchCaptures.picks++;const target=fixture.target||{id:fixture.schedules?'target-'+global.searchCaptures.picks:'fixture-target',name:fixture.schedules?'测试目标 '+global.searchCaptures.picks:'测试目标',title:fixture.schedules?'Renderer fixture '+global.searchCaptures.picks:'Renderer fixture',detail:'仅记录发送请求',strategy:'测试'};targets.set(target.id,target);return fixture.pendingPick?new Promise(resolve=>pendingPick=resolve):target;});

@@ -36,7 +36,7 @@ app.whenReady().then(async()=>{
     fetchRelease:async url=>{const response=await net.fetch(url,{headers:{Accept:'application/vnd.github+json'}});if(!response.ok)throw new Error(`HTTP ${response.status}`);return response.json();}});
   updates.on('state',state=>{if(state.phase==='error'&&closeReason==='update'){closing=false;approvedClose=false;closeReason=null;schedules?.reopen();}emit('desktop:update',state);});
   backend=createBackend();broker=new DeliveryBroker(backend);queue=new SendQueue(broker.channel());queue.on('state',state=>emit('desktop:queue',state));
-  schedules=new ScheduleManager({backend,broker,file:path.join(app.getPath('userData'),'schedules.json')});await schedules.load();schedules.on('state',state=>emit('desktop:schedules',state));
+  schedules=new ScheduleManager({backend,broker,file:path.join(app.getPath('userData'),'schedules.json')});await schedules.load();schedules.on('state',state=>emit('desktop:schedules',state));schedules.on('groups',groups=>emit('desktop:schedule-groups',groups));
   win=new BrowserWindow({width:1040,height:760,minWidth:680,minHeight:440,title:'命令定向',icon:path.join(__dirname,'../assets/icon.png'),backgroundColor:'#f7f7f8',show:false,frame:false,
     webPreferences:{preload:path.join(__dirname,'preload.cjs'),sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true}});
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -48,7 +48,7 @@ app.whenReady().then(async()=>{
   win.on('close',event=>{if(!approvedClose){event.preventDefault();void requestClose();}});
   win.on('closed',()=>{cancelPick();backend.dispose();win=null;app.quit();});
   for(const event of ['maximize','unmaximize','enter-full-screen','leave-full-screen'])win.on(event,()=>emit('desktop:window-state',windowState()));
-  handle('desktop:config',()=>({platform:process.platform,version:app.getVersion(),accessibility:backend.permission(),window:windowState(),update:updates.snapshot(),session:restored,schedules:schedules.snapshot()}));
+  handle('desktop:config',()=>({platform:process.platform,version:app.getVersion(),accessibility:backend.permission(),window:windowState(),update:updates.snapshot(),session:restored,schedules:schedules.snapshot(),scheduleGroups:schedules.groupSnapshot()}));
   handle('desktop:window-minimize',()=>win.minimize());
   handle('desktop:window-maximize',()=>{
     if(win.isFullScreen())win.setFullScreen(false);
@@ -102,6 +102,9 @@ app.whenReady().then(async()=>{
     const result=await schedules.save(value,target);releaseDraft();return result;
   });
   handle('desktop:schedule-action',(id,action)=>{if(closing)throw new Error('正在退出');return schedules.action(id,action);});
+  handle('desktop:schedule-move',(id,position)=>schedules.move(id,position));
+  handle('desktop:schedule-group-save',value=>schedules.saveGroup(value));
+  handle('desktop:schedule-group-action',(id,action)=>schedules.groupAction(id,action));
   handle('desktop:start',options=>{if(closing)throw new Error('请先完成退出或升级确认');if(picker)throw new Error('请先完成目标拾取');return queue.start(options||{});});
   handle('desktop:pause',()=>queue.pause());handle('desktop:resume',()=>queue.resume());handle('desktop:stop',()=>queue.stop());
   handle('desktop:close-response',async(confirm,activeId)=>{

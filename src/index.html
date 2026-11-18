@@ -41,12 +41,22 @@
 <dialog id="schedulesDialog" class="dialog schedules-dialog" aria-labelledby="schedulesTitle">
   <div class="dialog-heading"><div><h2 id="schedulesTitle">定时发送</h2></div><button class="icon-button" data-close="schedulesDialog" aria-label="关闭定时发送" data-icon="close"></button></div>
   <div class="schedules-layout">
-    <section class="schedule-sidebar" aria-label="定时任务列表"><button id="scheduleNew" class="secondary-button">＋ 新建任务</button><p id="scheduleEmpty">还没有定时任务</p><div id="scheduleList" class="schedule-list"></div></section>
+    <section class="schedule-sidebar" aria-label="定时任务列表">
+      <div class="schedule-list-actions"><button id="scheduleNew" class="secondary-button">新建任务</button><button id="scheduleGroupNew" class="secondary-button">新建分组</button></div>
+      <form id="scheduleGroupForm" class="schedule-group-form" hidden>
+        <label for="scheduleGroupName">组名</label><input id="scheduleGroupName" maxlength="80" required autocomplete="off">
+        <div class="schedule-group-actions"><button type="submit" class="secondary-button">保存组名</button><button id="scheduleGroupCancel" type="button">取消</button><button id="scheduleGroupDelete" type="button" hidden>删除组</button></div>
+        <p id="scheduleGroupError" class="schedule-error" role="alert" hidden></p>
+      </form>
+      <p id="scheduleOrderHint" class="schedule-order-hint">拖动手柄排序 · Alt + ↑ / ↓</p><p id="scheduleEmpty">还没有定时任务</p><div id="scheduleList" class="schedule-list"></div>
+      <p id="scheduleOrderStatus" class="visually-hidden" role="status" aria-live="polite"></p>
+    </section>
     <form id="scheduleForm" class="schedule-form">
       <div class="schedule-identity">
         <div class="schedule-field"><label for="scheduleTarget">发送目标</label><button type="button" id="scheduleTarget" class="secondary-button schedule-target" title="按住后拖到目标输入区释放"><span data-icon="crosshair"></span><span id="scheduleTargetLabel">选择目标</span></button></div>
         <div class="schedule-field"><label for="scheduleName">任务名称</label><input id="scheduleName" maxlength="80" required></div>
       </div>
+      <div class="schedule-field"><label for="scheduleGroup">所属分组</label><select id="scheduleGroup"><option value="">未分组</option></select></div>
       <textarea id="scheduleCommands" aria-label="待发送指令" rows="5" spellcheck="false" placeholder="待发送指令" required></textarea>
       <div class="schedule-timing">
         <div class="schedule-field schedule-mode"><label for="scheduleMode">定时方式</label><select id="scheduleMode"><option value="countdown">倒计时</option><option value="once">指定时间</option></select></div>
