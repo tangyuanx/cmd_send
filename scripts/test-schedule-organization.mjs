@@ -8,7 +8,7 @@ const temp=await fs.mkdtemp(path.join(os.tmpdir(),'cmd-organization-')),evidence
 const config={platform:process.platform,window:{},update:{phase:'idle',currentVersion:'test',supported:false},session:{activeId:'first',files:[{id:'first',name:'分组测试.txt',text:'echo test'}]}};
 const env={...process.env,CMD_SEND_SEARCH_FIXTURE:JSON.stringify({profile:path.join(temp,'profile'),page:path.join(root,'src','index.html'),config,schedules:true})};delete env.ELECTRON_RUN_AS_NODE;
 let app,page;const errors=[];
-async function launch(){app=await electron.launch({args:[...(process.platform==='linux'?['--no-sandbox','--ozone-platform=headless']:[]),path.join(root,'tests','fixtures','search-main.cjs')],env,timeout:60000});page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));await page.locator('#schedulesButton').click();}
+async function launch(){app=await electron.launch({args:[...(process.platform==='linux'?['--no-sandbox','--ozone-platform=headless']:[]),path.join(root,'tests','fixtures','search-main.cjs')],env,timeout:60000});page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));await page.evaluate(()=>{globalThis.scheduleDragEvents=[];for(const type of ['dragstart','dragover','drop','dragend'])document.addEventListener(type,event=>{const node=event.target;globalThis.scheduleDragEvents.push({type,job:node.closest?.('[data-job]')?.dataset.job,group:node.closest?.('[data-group]')?.dataset.group,x:event.clientX,y:event.clientY});},true);});await page.locator('#schedulesButton').click();}
 const row=name=>page.locator('.schedule-job').filter({has:page.locator('strong',{hasText:new RegExp('^'+name+'$')})});
 const order=()=>page.locator('.schedule-job strong').allTextContents();
 const state=()=>app.evaluate(()=>({jobs:global.scheduleManager.snapshot(),groups:global.scheduleManager.groupSnapshot(),writes:global.searchCaptures.deliveries}));
@@ -25,11 +25,11 @@ try{
  assert.equal(await row('B').locator('[data-drag-handle]').evaluate(el=>el===document.activeElement),true);
  console.log('PASS: native drag and keyboard reorder preserve keyboard focus');
  // Escape/outside release does not commit a drag.
- const before=await order(),handle=await row('A').locator('[data-drag-handle]').boundingBox(),target=await row('C').boundingBox();
- await page.mouse.move(handle.x+handle.width/2,handle.y+handle.height/2);await page.mouse.down();await page.mouse.move(target.x+50,target.y+5,{steps:8});await page.keyboard.press('Escape');await page.mouse.up();assert.deepEqual(await order(),before);
+ const before=await order(),handle=await row('A').locator('[data-drag-handle]').boundingBox(),target=await row('C').boundingBox(),traceOffset=await page.evaluate(()=>globalThis.scheduleDragEvents.length);
+ await page.mouse.move(handle.x+handle.width/2,handle.y+handle.height/2);await page.mouse.down();await page.mouse.move(target.x+50,target.y+5,{steps:8});await page.keyboard.press('Escape');await page.mouse.up();await page.waitForFunction(offset=>globalThis.scheduleDragEvents.slice(offset).some(event=>event.type==='dragend'),traceOffset);assert.deepEqual(await order(),before);
  console.log('PASS: cancelled drag preserves order');
  await createGroup('设备组');const group=(await state()).groups[0],section=page.locator(`[data-group="${group.id}"]`);
- await row('A').locator('[data-drag-handle]').dragTo(section.locator('.schedule-group-empty'));await settled();assert.equal((await state()).jobs.find(j=>j.name==='A').groupId,group.id);
+ await row('A').locator('[data-drag-handle]').dragTo(section.locator('.schedule-group-empty'));await page.waitForFunction(groupId=>[...document.querySelectorAll('.schedule-job')].find(node=>node.querySelector('strong').textContent==='A')?.closest('[data-group]')?.dataset.group===groupId,group.id);await settled();assert.equal((await state()).jobs.find(j=>j.name==='A').groupId,group.id);
  await row('B').getByRole('button',{name:'编辑',exact:true}).click();await page.locator('#scheduleGroup').selectOption(group.id);await page.locator('#scheduleSave').click();await settled();assert.equal(await section.locator('.schedule-job').count(),2);
  await page.getByRole('button',{name:'编辑分组 设备组',exact:true}).click();await page.locator('#scheduleGroupName').fill('设备联测');await page.getByRole('button',{name:'保存组名',exact:true}).click();await page.locator('#scheduleGroupForm').waitFor({state:'hidden'});
  assert.equal(await page.locator('#scheduleGroup option:checked').textContent(),'设备联测');
@@ -67,5 +67,5 @@ try{
  const error=await page.evaluate(async id=>{try{await window.desktop.scheduleGroupAction(id,'start');return '';}catch(e){return e.message;}},realGroup.id);assert.match(error,/重新绑定/);
  await page.evaluate(id=>window.desktop.scheduleGroupAction(id,'delete'),realGroup.id);assert.ok((await page.evaluate(()=>window.desktop.config())).schedules.every(j=>j.groupId===null));
  await app.evaluate(({app})=>app.exit(0));await app.close().catch(()=>{});app=null;assert.deepEqual(errors,[]);console.log('PASS: production main/preload IPC, isolated profile, group save, move, validation and deletion');
-}catch(error){console.error('RENDERER ERRORS',errors);if(app)console.error('STATE',await state());await page?.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});throw error;}
+}catch(error){console.error('RENDERER ERRORS',errors);if(app){console.error('STATE',await state().catch(()=>({})));console.error('DRAG EVENTS',await page.evaluate(()=>globalThis.scheduleDragEvents?.slice(-40)).catch(()=>[]));}await page?.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});throw error;}
 finally{await app?.close();await fs.rm(temp,{recursive:true,force:true,maxRetries:10,retryDelay:200});}

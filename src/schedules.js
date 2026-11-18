@@ -8,7 +8,7 @@ const shortLabel=t=>t?.alias||t?.sessionAddress||t?.sessionName||t?.name||t?.tit
 const pad=value=>String(value).padStart(2,'0');
 function remaining(at){const seconds=Math.max(0,Math.ceil((at-Date.now())/1000));return `${pad(Math.floor(seconds/3600))}:${pad(Math.floor(seconds/60)%60)}:${pad(seconds%60)} 后发送`;}
 export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSource,getSettings,canPick,toast}){
-  let jobs=initial,groups=initialGroups,id=null,target=null,picking=false,busy=false,ticker=null,groupEditId=null,dragId=null,dropPosition=null;
+  let jobs=initial,groups=initialGroups,id=null,target=null,picking=false,busy=false,ticker=null,groupEditId=null,dragId=null,dragSource=null,dropPosition=null;
   const dialog=$('schedulesDialog');
   function error(message=''){$('scheduleError').textContent=message;$('scheduleError').hidden=!message;}
   function renderTarget(){$('scheduleTargetLabel').textContent=picking?'拖到目标后释放':target?shortLabel(target):'选择目标';$('scheduleTarget').title=picking?'Esc 取消':label(target);}
@@ -52,7 +52,7 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
     catch(e){if(action==='delete')groupError(e.message);else error(e.message);toast(e.message);}finally{busy=false;render();}
   }
   function clearDrop(){dropPosition=null;for(const node of $('scheduleList').querySelectorAll('.drop-before,.drop-after,.drop-group'))node.classList.remove('drop-before','drop-after','drop-group');}
-  function endDrag(){dragId=null;clearDrop();render();}
+  function endDrag(){dragId=null;dragSource=null;clearDrop();render();}
   async function moveTask(job,position,keyboard=false){
     if(busy||picking)return;busy=true;render();error();
     try{jobs=await desktop.moveSchedule(job.id,position);$('scheduleOrderStatus').textContent=`已移动「${job.name}」并保存顺序`;}
@@ -63,8 +63,10 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
     const heading=document.createElement('div');heading.className='schedule-job-heading';
     const handle=document.createElement('button');handle.type='button';handle.className='schedule-drag-handle';handle.dataset.dragHandle=j.id;handle.dataset.focusKey='move:'+j.id;handle.draggable=!busy&&!picking;handle.disabled=busy||picking;handle.title='拖动排序；Alt + 上/下移动';handle.setAttribute('aria-label',`移动 ${j.name}`);
     handle.innerHTML='<svg viewBox="0 0 16 20" aria-hidden="true" fill="currentColor"><circle cx="5" cy="5" r="1"/><circle cx="11" cy="5" r="1"/><circle cx="5" cy="10" r="1"/><circle cx="11" cy="10" r="1"/><circle cx="5" cy="15" r="1"/><circle cx="11" cy="15" r="1"/></svg>';
-    handle.addEventListener('dragstart',event=>{if(busy||picking){event.preventDefault();return;}dragId=j.id;event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',j.id);event.dataTransfer.setDragImage(row,12,12);});
-    handle.addEventListener('dragend',endDrag);
+    handle.addEventListener('dragstart',event=>{if(busy||picking){event.preventDefault();return;}dragId=j.id;dragSource=handle;event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',j.id);event.dataTransfer.setDragImage(row,12,12);});
+    // A cancelled Windows native drag can finish after the list has rerendered.
+    // An old source must never clear a newer drag's destination.
+    handle.addEventListener('dragend',()=>{if(dragSource===handle)endDrag();});
     handle.addEventListener('keydown',event=>{
       if(!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key)||busy||picking)return;event.preventDefault();
       const members=jobs.filter(x=>(x.groupId||null)===(j.groupId||null)),index=members.findIndex(x=>x.id===j.id),up=event.key==='ArrowUp';
