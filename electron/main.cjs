@@ -12,6 +12,7 @@ const {restoreSession,saveSession}=require('./session.cjs');
 app.setName('命令定向');
 if(!app.requestSingleInstanceLock()){app.quit();}else{
 let pickEpoch=0;
+let savingSchedule=false;
 let win,backend,queue,broker,schedules,picker,manualTarget=null,draftTarget=null,updates,sessionFile,restored,closing=false,approvedClose=false,closeReason=null,finalizingClose=false;
 const files=new FileStore();
 const page=pathToFileURL(path.join(__dirname,'../src/index.html')).href;
@@ -97,9 +98,25 @@ app.whenReady().then(async()=>{
   handle('desktop:schedule-draft-release',releaseDraft);
   handle('desktop:schedule-save',async value=>{
     if(closing||picker)throw new Error('请先完成目标拾取或退出确认');
-    const targetId=value?.targetId;let target=null;
-    if(targetId){target=[manualTarget,draftTarget,...schedules.snapshot().map(j=>j.target)].find(t=>t?.id===targetId);if(!target)throw new Error('目标未绑定或已失效');target={...target,alias:typeof value.targetAlias==='string'?value.targetAlias.slice(0,80):target.alias};}
-    const result=await schedules.save(value,target);releaseDraft();return result;
+    if(savingSchedule)throw new Error('正在保存定时任务');
+    const targetId=value?.targetId;
+    const picked=targetId&&draftTarget?.id===targetId?draftTarget:null;
+    if(!value?.id&&!picked)throw new Error('请为新任务拖动选择发送目标');
+    const saved=targetId&&value?.id?schedules.get(value.id).target:null;
+    const target=picked||(saved?.id===targetId?saved:null);
+    if(targetId&&!target)throw new Error('目标未绑定或已失效');
+    const bound=target?{...target,alias:typeof value.targetAlias==='string'?value.targetAlias.slice(0,80):target.alias}:null;
+    // Keep a picked target alive if the dialog closes while saving the task.
+    if(picked)backend.retain(picked.id);
+    savingSchedule=true;
+    try{
+      const result=await schedules.save(value,bound);
+      if(picked&&draftTarget===picked)releaseDraft();
+      return result;
+    }finally{
+      savingSchedule=false;
+      if(picked)backend.release(picked.id);
+    }
   });
   handle('desktop:schedule-action',(id,action)=>{if(closing)throw new Error('正在退出');return schedules.action(id,action);});
   handle('desktop:schedule-move',(id,position)=>schedules.move(id,position));

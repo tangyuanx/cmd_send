@@ -42,7 +42,7 @@
   <div class="dialog-heading"><div><h2 id="schedulesTitle">定时发送</h2></div><button class="icon-button" data-close="schedulesDialog" aria-label="关闭定时发送" data-icon="close"></button></div>
   <div class="schedules-layout">
     <section class="schedule-sidebar" aria-label="定时任务列表">
-      <div class="schedule-list-actions"><button id="scheduleNew" class="secondary-button">新建任务</button><button id="scheduleGroupNew" class="secondary-button">新建分组</button></div>
+      <div class="schedule-list-actions"><button id="scheduleNew" type="button"><span data-icon="plus"></span>新建任务</button><button id="scheduleGroupNew" type="button"><span data-icon="folderPlus"></span>新建分组</button></div>
       <form id="scheduleGroupForm" class="schedule-group-form" hidden>
         <label for="scheduleGroupName">组名</label><input id="scheduleGroupName" maxlength="80" required autocomplete="off">
         <div class="schedule-group-actions"><button type="submit" class="secondary-button">保存组名</button><button id="scheduleGroupCancel" type="button">取消</button><button id="scheduleGroupDelete" type="button" hidden>删除组</button></div>
@@ -53,12 +53,18 @@
     </section>
     <form id="scheduleForm" class="schedule-form">
       <div class="schedule-editor">
-        <input id="scheduleName" aria-label="任务名称" placeholder="任务名称" maxlength="80" required>
-        <textarea id="scheduleCommands" aria-label="待发送指令" rows="5" spellcheck="false" placeholder="输入待发送指令" required></textarea>
+        <div class="schedule-editor-heading">
+          <input id="scheduleName" aria-label="任务名称" placeholder="任务名称" maxlength="80" required>
+          <button id="scheduleDelete" type="button" class="icon-button" data-icon="trash" aria-label="删除任务" title="删除任务" hidden></button>
+        </div>
+        <div class="schedule-command-field">
+          <label for="scheduleCommands">指令</label>
+          <textarea id="scheduleCommands" rows="5" spellcheck="false" placeholder="每行一条指令" required></textarea>
+        </div>
       </div>
       <div class="schedule-toolbar">
         <div class="schedule-config" role="group" aria-label="发送配置">
-          <button type="button" id="scheduleTarget" class="secondary-button schedule-target" title="按住后拖到目标输入区释放"><span data-icon="crosshair"></span><span id="scheduleTargetLabel">选择目标</span></button>
+          <button type="button" id="scheduleTarget" class="schedule-target" aria-label="发送目标：未绑定" title="按住并拖到目标输入区"><span data-icon="crosshair"></span><span id="scheduleTargetLabel">未绑定</span></button>
           <select id="scheduleGroup" aria-label="所属分组"><option value="">未分组</option></select>
           <select id="scheduleMode" aria-label="定时方式"><option value="countdown">倒计时</option><option value="once">指定时间</option></select>
           <div id="schedulePeriodRow" class="schedule-period"><input id="schedulePeriod" aria-label="等待时长" type="number" min="1" max="86400" step="1" value="5"><select id="scheduleUnit" aria-label="倒计时单位"><option value="1000">秒</option><option value="60000">分钟</option><option value="3600000">小时</option></select></div>

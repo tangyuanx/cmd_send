@@ -3,20 +3,31 @@ import {validCommand} from './core.js';
 const $=id=>document.getElementById(id);
 const statuses={unbound:'待绑定',paused:'已暂停',scheduled:'已启用',waiting:'排队中',running:'发送中',completed:'已完成',failed:'失败',missed:'已错过'};
 const time=value=>value?new Date(value).toLocaleString():'';
-const label=t=>t?[t.alias||t.sessionName||t.title||t.name,t.sessionAddress,t.sessionPort?`端口 ${t.sessionPort}`:''].filter(Boolean).join(' · '):'选择目标';
-const shortLabel=t=>t?.alias||t?.sessionAddress||t?.sessionName||t?.name||t?.title||'待绑定';
+function targetLabel(target){
+  const {alias,name,title,sessionName,sessionAddress,sessionPort}=target;
+  const address=sessionAddress?.includes(':')&&sessionPort?`[${sessionAddress}]`:sessionAddress;
+  const endpoint=address?`${address}${sessionPort?`:${sessionPort}`:''}`:sessionName;
+  return [...new Set([alias||name||title,endpoint].filter(Boolean))].join(' · ')||'已绑定';
+}
 const pad=value=>String(value).padStart(2,'0');
 const presets={
   countdown:[['5 秒',5000,1000],['30 秒',30000,1000],['1 分钟',60000,60000],['5 分钟',300000,60000],['30 分钟',1800000,60000]],
   once:[['1 分钟后',60000],['5 分钟后',300000],['30 分钟后',1800000],['1 小时后',3600000]]
 };
 function remaining(at){const seconds=Math.max(0,Math.ceil((at-Date.now())/1000));return `${pad(Math.floor(seconds/3600))}:${pad(Math.floor(seconds/60)%60)}:${pad(seconds%60)} 后发送`;}
-export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSource,getSettings,canPick,toast}){
+export function initSchedules({desktop,initial,initialGroups=[],icon,getSource,getSettings,canPick,toast}){
   let jobs=initial,groups=initialGroups,id=null,target=null,picking=false,busy=false,ticker=null,groupEditId=null,dragId=null,dragSource=null,dropPosition=null;
   const dialog=$('schedulesDialog');
   const collapsedGroups=new Set();
   function error(message=''){$('scheduleError').textContent=message;$('scheduleError').hidden=!message;}
-  function renderTarget(){$('scheduleTargetLabel').textContent=picking?'拖到目标后释放':target?shortLabel(target):'选择目标';$('scheduleTarget').title=picking?'Esc 取消':label(target);}
+  function renderTarget(){
+    const button=$('scheduleTarget');
+    const name=picking?'拖到目标后释放':target?targetLabel(target):'未绑定';
+    $('scheduleTargetLabel').textContent=name;
+    button.dataset.bound=String(Boolean(target));
+    button.setAttribute('aria-label',`发送目标：${name}`);
+    button.title=picking?'Esc 取消':target?`${name}\n按住拖动可更换`:'按住并拖到目标输入区';
+  }
   function setDate(date){
     $('scheduleDate').value=`${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`;
     $('scheduleHour').value=pad(date.getHours());$('scheduleMinute').value=pad(date.getMinutes());$('scheduleSecond').value=pad(date.getSeconds());
@@ -77,8 +88,8 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
   }
   function renderJob(j,parent){
     const row=document.createElement('article');row.className='schedule-job'+(id===j.id?' selected':'');row.dataset.job=j.id;
-    const heading=document.createElement('div');heading.className='schedule-job-heading';
     const handle=document.createElement('button');handle.type='button';handle.className='schedule-drag-handle';handle.dataset.dragHandle=j.id;handle.dataset.focusKey='move:'+j.id;handle.draggable=!busy&&!picking;handle.disabled=busy||picking;handle.title='拖动排序；Alt + 上/下移动';handle.setAttribute('aria-label',`移动 ${j.name}`);
+    handle.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
     handle.innerHTML='<svg viewBox="0 0 16 20" aria-hidden="true" fill="currentColor"><circle cx="5" cy="5" r="1"/><circle cx="11" cy="5" r="1"/><circle cx="5" cy="10" r="1"/><circle cx="11" cy="10" r="1"/><circle cx="5" cy="15" r="1"/><circle cx="11" cy="15" r="1"/></svg>';
     handle.addEventListener('dragstart',event=>{if(busy||picking){event.preventDefault();return;}dragId=j.id;dragSource=handle;event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',j.id);event.dataTransfer.setDragImage(row,12,12);});
     // A cancelled Windows native drag can finish after the list has rerendered.
@@ -91,17 +102,27 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
     });
     const title=document.createElement('strong');title.textContent=j.name;title.title=j.name;
     const editButton=document.createElement('button');editButton.type='button';editButton.className='schedule-job-name';editButton.title=j.name;
-    editButton.append(title);editButton.setAttribute('aria-label','编辑');editButton.dataset.focusKey='edit:'+j.id;
+    editButton.setAttribute('aria-label',`编辑 ${j.name}`);editButton.dataset.focusKey='edit:'+j.id;
+    if(id===j.id)editButton.setAttribute('aria-current','true');
     editButton.disabled=busy||picking;editButton.addEventListener('click',()=>operate(j,'edit'));
-    const toggle=document.createElement('button');toggle.type='button';toggle.className='schedule-toggle';toggle.dataset.focusKey='toggle:'+j.id;toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(j.enabled));toggle.setAttribute('aria-label',`${j.name}：${j.enabled?'暂停':'启动'}`);toggle.title=j.enabled?'暂停':'启动';toggle.disabled=busy||picking||(!j.enabled&&!j.target);toggle.addEventListener('click',()=>operate(j,j.enabled?'pause':'start'));heading.append(handle,editButton,toggle);
-    const state=document.createElement('div');state.className='schedule-job-state';state.dataset.status=j.status;
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='schedule-toggle';toggle.dataset.focusKey='toggle:'+j.id;toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(j.enabled));toggle.setAttribute('aria-label',`${j.name}：${j.enabled?'暂停':'启动'}`);toggle.title=j.enabled?'暂停':'启动';toggle.disabled=busy||picking||(!j.enabled&&!j.target);toggle.addEventListener('click',()=>operate(j,j.enabled?'pause':'start'));
+    const state=document.createElement('span');state.className='schedule-job-state';state.dataset.status=j.status;
     const status=document.createElement('span');status.textContent=statuses[j.status]||j.status;
-    const next=document.createElement('span');next.className='schedule-next';if(j.enabled&&j.nextAt)next.dataset.nextAt=String(j.nextAt);next.textContent=j.enabled&&j.nextAt?remaining(j.nextAt):'';next.title=j.nextAt?time(j.nextAt):j.lastAt?`上次 ${time(j.lastAt)}`:'';state.append(status,next);
-    const footer=document.createElement('div');footer.className='schedule-job-footer';
-    const info=document.createElement('span');info.className='schedule-job-target';info.textContent=j.target?shortLabel(j.target):j.targetLabel||'待绑定';info.title=j.target?label(j.target):j.targetLabel;footer.append(info);
-    const remove=document.createElement('button');remove.type='button';remove.textContent='删除';remove.dataset.focusKey='delete:'+j.id;
-    remove.disabled=busy||picking;remove.addEventListener('click',()=>operate(j,'delete'));footer.append(state,remove);
-    row.append(heading,footer);
+    status.title=j.lastAt?`上次 ${time(j.lastAt)}`:'';
+    const next=document.createElement('span');next.className='schedule-next';
+    state.append(status);
+    if(j.enabled&&j.nextAt){
+      const clock=document.createElement('span');clock.className='schedule-clock';clock.innerHTML=icon('clock');
+      next.dataset.nextAt=String(j.nextAt);next.textContent=remaining(j.nextAt);next.title=time(j.nextAt);state.append(clock);
+    }
+    state.append(next);
+    const info=document.createElement('span');info.className='schedule-job-target';
+    const targetIcon=document.createElement('span');targetIcon.innerHTML=icon('arrowUpRight');
+    const destination=document.createElement('span');destination.textContent=j.target?targetLabel(j.target):j.targetLabel||'未绑定';
+    info.classList.toggle('unbound',!j.target&&!j.targetLabel);info.append(targetIcon,destination);
+    editButton.append(title,info);
+    if(j.target||j.targetLabel)editButton.append(state);
+    row.append(handle,editButton,toggle);
     if(j.error){const failure=document.createElement('p');failure.className='schedule-error';failure.textContent=j.error;row.append(failure);}parent.append(row);
   }
   function renderGroupHeading(group,members,rows){
@@ -121,9 +142,11 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
     const active=members.filter(j=>j.enabled).length;
     const allActive=members.length>0&&active===members.length;
     const action=document.createElement('button');action.type='button';action.className='schedule-group-toggle';
-    action.dataset.active=String(allActive);action.dataset.focusKey='group-toggle:'+group.id;
-    action.textContent=allActive?'暂停全部':'开启全部';
-    action.setAttribute('aria-label',`${group.name}：${action.textContent}`);
+    const actionLabel=allActive?'全组暂停':'全组启动';
+    action.dataset.focusKey='group-toggle:'+group.id;
+    action.innerHTML=icon(allActive?'pause':'play');
+    action.title=actionLabel;
+    action.setAttribute('aria-label',`${group.name}：${actionLabel}`);
     action.disabled=busy||picking||!members.length;
     action.addEventListener('click',()=>groupAction(group,allActive?'pause':'start'));
 
@@ -135,7 +158,7 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
     rename.addEventListener('click',()=>{menu.hidePopover();editGroup(group);});
     menu.append(rename);
     if(active&&!allActive){
-      const pause=document.createElement('button');pause.type='button';pause.textContent='暂停全部';
+      const pause=document.createElement('button');pause.type='button';pause.textContent='全组暂停';
       pause.addEventListener('click',()=>groupAction(group,'pause'));
       menu.append(pause);
     }
@@ -147,6 +170,7 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
     if(dragId)return;
     const list=$('scheduleList'),focusKey=list.contains(document.activeElement)?document.activeElement.dataset.focusKey:null;list.replaceChildren();$('scheduleEmpty').hidden=jobs.length>0||groups.length>0;
     $('scheduleNew').disabled=busy||picking;$('scheduleGroupNew').disabled=busy||picking;for(const node of $('scheduleGroupForm').elements)node.disabled=busy||picking;
+    $('scheduleDelete').hidden=!id;$('scheduleDelete').disabled=busy||picking;
     const count=jobs.filter(j=>j.enabled).length;$('scheduleActiveCount').textContent=String(count);$('scheduleActiveCount').hidden=!count;
     for(const group of [{id:null,name:'未分组'},...groups]){
       const members=jobs.filter(j=>(j.groupId||null)===group.id);if(!group.id&&!groups.length&&!members.length)continue;
@@ -163,9 +187,9 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
   }
   async function edit(job=null){
     if(picking||busy)return;
-    const source=job?null:getSource(),defaultTarget=getTarget();
+    const source=job?null:getSource();
     await desktop.releaseScheduleDraft?.();
-    id=job?.id||null;target=job?.target||defaultTarget||null;const s=getSettings();
+    id=job?.id||null;target=job?.target||null;const s=getSettings();
     groupOptions();$('scheduleGroup').value=job?.groupId||'';
     $('scheduleName').value=job?.name||`定时任务 ${jobs.length+1}`;$('scheduleCommands').value=(job?.commands||source?.commands||[]).join('\n');
     $('scheduleMode').value=job?.mode==='once'?'once':'countdown';const period=job?.periodMs||5000,unit=period%3600000===0?3600000:period%60000===0?60000:1000;
@@ -206,6 +230,7 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
   });
   $('schedulesButton').addEventListener('click',async()=>{if(!desktop.saveSchedule){toast('当前环境不支持定时发送');return;}await edit();if(!dialog.open){dialog.showModal();ticker=setInterval(updateRemaining,250);}});
   $('scheduleNew').addEventListener('click',()=>void edit());$('scheduleMode').addEventListener('change',mode);$('scheduleUnit').addEventListener('change',durationLimit);
+  $('scheduleDelete').addEventListener('click',()=>{const job=jobs.find(j=>j.id===id);if(job)void operate(job,'delete');});
   $('scheduleForm').addEventListener('submit',async event=>{
     event.preventDefault();if(busy||picking)return;error();
     const commands=$('scheduleCommands').value.split(/\r?\n/).filter(c=>validCommand(c,getSettings().prefixes));
@@ -214,7 +239,7 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
     const periodMs=Math.round(Number($('schedulePeriod').value)*Number($('scheduleUnit').value));
     if(once&&(!Number.isSafeInteger(at)||at<=Date.now())){error('发送时间需要晚于当前时间');return;}
     if(!once&&(!Number.isSafeInteger(periodMs)||periodMs<1000||periodMs>86400000)){error('倒计时需在 1 秒到 24 小时之间');return;}
-    if(start&&!target){error('请先绑定发送目标');return;}
+    if((!id||start)&&!target){error('请拖动选择发送目标');$('scheduleTarget').focus();return;}
     const value={...(id?{id}:{}),name:$('scheduleName').value,commands,targetId:target?.id,targetAlias:target?.alias,groupId:$('scheduleGroup').value||null,mode:once?'once':'countdown',periodMs:once?5000:periodMs,at,enter:$('scheduleEnter').checked,commandInterval:Number($('scheduleCommandInterval').value),characterInterval:Number($('scheduleCharacterInterval').value),start};
     busy=true;$('scheduleSave').disabled=true;$('scheduleStart').disabled=true;render();
     try{const previous=new Set(jobs.map(j=>j.id));jobs=await desktop.saveSchedule(value);id=id||jobs.find(j=>!previous.has(j.id))?.id;collapsedGroups.delete(value.groupId);toast(start?'定时任务已启动':'已保存');}

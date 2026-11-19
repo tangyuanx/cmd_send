@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';
 import {fileURLToPath} from 'node:url';import {_electron as electron} from 'playwright';
+import {dragTarget} from '../tests/fixtures/drag-target.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const temp=await fs.mkdtemp(path.join(os.tmpdir(),'cmd-send-import-'));
 const evidence=path.join(root,'test-output','schedule-import');await fs.mkdir(evidence,{recursive:true});
@@ -19,6 +20,10 @@ const mod=process.platform==='darwin'?'Meta':'Control';
 async function cursor(line,select=false){await page.locator('#editor').focus();await page.keyboard.press(process.platform==='darwin'?'Meta+ArrowUp':'Control+Home');for(let i=1;i<line;i++)await page.keyboard.press('ArrowDown');await page.keyboard.press(process.platform==='darwin'?'Meta+ArrowLeft':'Home');if(select)await page.keyboard.press(process.platform==='darwin'?'Meta+Shift+ArrowRight':'Shift+End');}
 const open=()=>page.locator('#schedulesButton').click();
 const close=()=>page.locator('[data-close="schedulesDialog"]').click();
+async function bindScheduleTarget(){
+ await dragTarget(page,'#scheduleTarget');
+ await page.waitForFunction(()=>document.getElementById('scheduleTarget').dataset.bound==='true');
+}
 try{
  await launch([first,second]);await cursor(2);await open();
  assert.equal(await page.locator('#scheduleCommands').inputValue(),'echo A');
@@ -27,11 +32,11 @@ try{
  // Real keyboard selections become fresh drafts each time the dialog opens.
  await close();await page.locator('#editor').focus();await page.keyboard.press(mod+'+A');await open();
  assert.equal(await page.locator('#scheduleCommands').inputValue(),'echo A\necho B\necho C');
- await page.locator('#scheduleName').fill('保留的任务');await page.locator('#schedulePeriod').fill('12');await page.locator('#scheduleSave').click();await page.waitForFunction(()=>document.querySelectorAll('.schedule-job').length===1);
+ await page.locator('#scheduleName').fill('保留的任务');await page.locator('#schedulePeriod').fill('12');await bindScheduleTarget();await page.locator('#scheduleSave').click();await page.waitForFunction(()=>document.querySelectorAll('.schedule-job').length===1);
  await close();await cursor(5,true);await open();assert.equal(await page.locator('#scheduleCommands').inputValue(),'echo B');
  assert.deepEqual(await app.evaluate(()=>global.scheduleManager.snapshot()[0].commands),['echo A','echo B','echo C']);
  // Editing is explicit; opening a new draft does not overwrite a stored task.
- await page.locator('.schedule-job').getByRole('button',{name:'编辑',exact:true}).click();assert.equal(await page.locator('#scheduleName').inputValue(),'保留的任务');assert.equal(await page.locator('#schedulePeriod').inputValue(),'12');assert.equal(await page.locator('#scheduleCommands').inputValue(),'echo A\necho B\necho C');
+ await page.locator('.schedule-job').getByRole('button',{name:/^编辑 /}).click();assert.equal(await page.locator('#scheduleName').inputValue(),'保留的任务');assert.equal(await page.locator('#schedulePeriod').inputValue(),'12');assert.equal(await page.locator('#scheduleCommands').inputValue(),'echo A\necho B\necho C');
  // Invalid current lines stay empty instead of silently skipping to the next command.
  for(const line of [1,3,4]){await close();await cursor(line);await open();assert.equal(await page.locator('#scheduleCommands').inputValue(),'');}
  // A partial selection preserves only the selected characters.
@@ -40,7 +45,7 @@ try{
  await page.screenshot({path:path.join(evidence,'automatic-selection.png')});
  assert.deepEqual(await app.evaluate(()=>global.searchCaptures.plans),[]);assert.deepEqual(await app.evaluate(()=>global.searchCaptures.saves),[]);
  await app.close();app=null;await launch([]);await open();assert.equal(await page.locator('#scheduleCommands').inputValue(),'');
- await page.locator('#scheduleCommands').fill('manual command');await page.locator('#scheduleSave').click();await page.waitForFunction(()=>document.querySelectorAll('.schedule-job').length===1);
+ await page.locator('#scheduleCommands').fill('manual command');await bindScheduleTarget();await page.locator('#scheduleSave').click();await page.waitForFunction(()=>document.querySelectorAll('.schedule-job').length===1);
  assert.deepEqual(errors,[]);console.log('PASS: automatic exact caret/selection drafts, no import copy, explicit stored-task editing, partial selection and file switch');
 }catch(error){console.error('Renderer errors',errors);await page?.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});throw error;}
 finally{await app?.close();await fs.rm(temp,{recursive:true,force:true});}

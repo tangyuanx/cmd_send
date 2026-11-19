@@ -138,11 +138,11 @@ svg{stroke-width:1.8}
 #scheduleActiveCount{padding:0 5px;border-radius:4px;background:var(--selected);font-variant-numeric:tabular-nums}
 .schedules-dialog{width:920px;max-width:calc(100vw - 24px)}
 .schedules-dialog .dialog-heading{padding:18px 20px 14px}
-.schedules-layout{display:grid;grid-template-columns:264px minmax(0,1fr);border-top:1px solid var(--border);height:clamp(220px,calc(100dvh - 128px),550px);overflow:hidden}
-.schedule-sidebar{min-height:0;border-right:1px solid var(--border);background:var(--sidebar);padding:14px;overflow:auto}
-.schedule-sidebar>button{width:100%}
-.schedule-list-actions{display:flex;gap:6px}
-.schedule-list-actions>button{flex:1;padding:7px 6px;min-width:0;white-space:nowrap}
+.schedules-layout{display:grid;grid-template-columns:286px minmax(0,1fr);border-top:1px solid var(--border);height:clamp(220px,calc(100dvh - 128px),550px);overflow:hidden}
+.schedule-sidebar{min-height:0;border-right:1px solid var(--border);background:var(--sidebar);padding:10px 12px;overflow:auto}
+.schedule-list-actions{display:flex;gap:4px;margin-bottom:7px}
+.schedule-list-actions>button{padding:3px 6px;gap:5px;min-height:28px;font-size:12px;color:var(--secondary)}
+.schedule-list-actions svg,.schedule-group-toggle svg{width:14px;height:14px}
 .schedule-group{min-width:0;padding-bottom:4px}
 .schedule-group+.schedule-group{margin-top:12px}
 .schedule-group-heading{display:flex;align-items:center;gap:4px;margin:12px 0 4px;min-width:0}
@@ -151,10 +151,7 @@ svg{stroke-width:1.8}
 .schedule-group-fold[aria-expanded=true]::before{transform:translateY(-2px) rotate(45deg)}
 .schedule-group-name{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .schedule-group-count{color:var(--secondary);font-size:12px;font-variant-numeric:tabular-nums}
-.schedule-group-toggle{flex:none;min-height:28px;padding:4px 8px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--find-current);color:var(--text)}
-.schedule-group-toggle:hover:not(:disabled){background:color-mix(in srgb,var(--find-current) 85%,var(--text))}
-.schedule-group-toggle[data-active=true]{background:var(--subtle)}
-.schedule-group-toggle[data-active=true]:hover:not(:disabled){background:var(--selected)}
+.schedule-group-toggle{flex:none;width:30px;height:28px;padding:0;color:var(--secondary)}
 .schedule-group-more{flex:none;width:26px;height:26px;padding:0;font-size:18px}
 .schedule-group-menu{position:fixed;position-area:block-end span-inline-start;position-try-fallbacks:flip-block;margin:4px 0 0;padding:4px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);box-shadow:0 4px 16px #0002}
 .schedule-group-menu button{justify-content:flex-start;width:100%;padding:6px 10px;font-size:13px}
@@ -164,7 +161,8 @@ svg{stroke-width:1.8}
 .schedule-group-form{margin:12px 0;padding:12px 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
 .schedule-group-form label{font-size:14px}
 .schedule-group-form input{width:100%;height:34px;min-width:0;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:6px 8px;font:inherit}
-.schedule-drag-handle{flex:none;width:22px;height:28px;padding:2px;color:var(--secondary);cursor:grab;touch-action:none}
+.schedule-drag-handle{width:22px;height:28px;margin-top:2px;padding:2px;color:var(--secondary);cursor:grab;touch-action:none;opacity:0;pointer-events:none;transition-property:background}
+.schedule-job:hover .schedule-drag-handle,.schedule-drag-handle:focus,.schedule-drag-handle:active{opacity:1;pointer-events:auto}
 .schedule-drag-handle:active{cursor:grabbing}
 .schedule-drag-handle svg{width:16px;height:20px}
 .schedule-job{position:relative}
@@ -173,36 +171,46 @@ svg{stroke-width:1.8}
 .schedule-group.drop-group{outline:1px dashed var(--find-outline);outline-offset:3px}
 #scheduleOrderStatus{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 #scheduleEmpty{color:var(--secondary);font-size:14px;text-align:center;margin:28px 0}
-.schedule-job{padding:3px 7px 3px 3px;min-width:0;border-radius:6px}
-.schedule-job+.schedule-job{margin-top:2px}
+.schedule-job{display:grid;grid-template-columns:22px minmax(0,1fr);align-items:start;gap:2px;padding:0 7px 0 3px;min-width:0;border-radius:6px}
+.schedule-job+.schedule-job{margin-top:3px}
 .schedule-job:hover{background:var(--subtle)}
 .schedule-job.selected{background:var(--find-line);box-shadow:inset 2px 0 var(--find-outline)}
-.schedule-job-heading,.schedule-job-state,.schedule-job-footer{display:flex;align-items:center;gap:6px;min-width:0}
-.schedule-job-name{padding:2px 0;flex:1;min-width:0;justify-content:flex-start;text-align:left}
-.schedule-job strong{font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.schedule-job-state{flex:none;color:var(--secondary);font-size:12px;font-variant-numeric:tabular-nums;gap:4px}
-.schedule-job-state[data-status=scheduled]>span:first-child{color:var(--find-outline)}
-.schedule-next{color:var(--text);white-space:nowrap}
+.schedule-job-name{display:grid;justify-content:stretch;gap:2px;padding:6px 4px;min-width:0;text-align:left}
+.schedule-job-name:hover:not(:disabled){background:transparent}
+.schedule-job strong{min-width:0;margin-right:36px;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.schedule-job-target,.schedule-job-state{display:flex;align-items:baseline;gap:5px;min-width:0;white-space:normal}
+.schedule-job-target{font-size:13px;color:var(--text);overflow-wrap:anywhere}
+.schedule-job-target.unbound,.schedule-job-state{color:var(--secondary)}
+.schedule-job-target svg,.schedule-clock svg{width:12px;height:12px}
+.schedule-job-target>span:first-child,.schedule-clock{align-self:flex-start;flex:none;margin-top:3px}
+.schedule-job-target>span:first-child{color:var(--secondary)}
+.schedule-job-state{font-size:12px;font-variant-numeric:tabular-nums}
+.schedule-job-state[data-status=scheduled]{color:var(--find-outline)}
+.schedule-next{white-space:nowrap}
 .schedule-next:empty{display:none}
 .schedule-job-state[data-status=scheduled]:has([data-next-at])>span:first-child{display:none}
-.schedule-job-footer{padding-left:28px;font-size:12px;color:var(--secondary)}
-.schedule-job-target{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.schedule-job-footer button{font-size:12px;padding:2px 4px;color:var(--secondary)}
-.schedule-toggle{position:relative;flex:none;width:30px;height:18px;padding:0;border-radius:20px;background:var(--border);border:1px solid var(--secondary)}
-.schedule-toggle:before{content:'';position:absolute;left:2px;width:12px;height:12px;border-radius:50%;background:var(--secondary)}
+.schedule-job>.schedule-error{grid-column:2;margin-bottom:4px}
+.schedule-toggle{position:absolute;top:7px;right:8px;width:28px;height:16px;padding:0;border-radius:20px;background:var(--border);border:1px solid var(--secondary)}
+.schedule-toggle:before{content:'';position:absolute;left:2px;width:10px;height:10px;border-radius:50%;background:var(--secondary)}
 .schedule-toggle[aria-checked=true]{background:var(--find-outline);border-color:var(--find-outline)}
 .schedule-toggle[aria-checked=true]:before{left:14px;background:#fff}
 .schedule-toggle[aria-checked=true]:hover{background:var(--find-outline)}
 .schedule-form{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:auto}
 .schedule-editor{display:flex;flex-direction:column;flex:1 0 auto;min-height:150px;padding:15px 20px 8px;gap:8px}
-.schedule-editor input,.schedule-editor textarea{background:transparent;color:var(--text);border:0;border-radius:4px;padding:4px 5px;min-width:0;font:inherit}
-.schedule-editor input{font-size:18px;font-weight:600}
-.schedule-editor textarea{width:100%;flex:1 0 auto;height:110px;resize:none;line-height:1.6;font-family:Consolas,'Cascadia Mono',var(--app-font),monospace}
+.schedule-editor-heading{display:flex;align-items:center;gap:8px}
+.schedule-editor input{flex:1;min-width:0;background:transparent;color:var(--text);border:0;border-radius:4px;padding:3px 0;font:inherit;font-size:18px;font-weight:600}
+.schedule-command-field{display:flex;flex-direction:column;flex:1 0 auto;gap:5px}
+.schedule-command-field label{align-self:flex-start;font-size:12px;color:var(--secondary)}
+.schedule-command-field textarea{width:100%;flex:1 0 auto;height:106px;min-width:0;resize:none;border:1px solid color-mix(in srgb,var(--border) 86%,var(--secondary));border-radius:6px;background:transparent;color:var(--text);padding:9px 11px;font:inherit;line-height:1.6;font-family:Consolas,'Cascadia Mono',var(--app-font),monospace;caret-color:var(--text)}
 .schedules-dialog :focus-visible{outline:2px solid var(--secondary);outline-offset:-2px}
+.schedule-command-field textarea:focus{outline:none;box-shadow:none}
+.schedule-command-field:focus-within label{color:var(--text);text-decoration:underline;text-underline-offset:4px}
 .schedule-toolbar{flex:none;display:grid;gap:8px;border-top:1px solid var(--border);padding:10px 20px 12px}
 .schedule-config{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
 .schedule-toolbar input:not([type=checkbox]),.schedule-toolbar select,.schedule-target{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:4px 6px;min-width:0;font:inherit;font-size:13px;height:30px}
-.schedule-target{justify-content:flex-start;text-align:left;max-width:150px}
+.schedule-target{justify-content:flex-start;text-align:left;max-width:170px;cursor:grab;touch-action:none;user-select:none}
+.schedule-target:active{cursor:grabbing}
+.schedule-target[data-bound=false]{color:var(--secondary)}
 .schedule-target [data-icon]{flex:none}
 #scheduleTargetLabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #scheduleGroup{max-width:120px;text-overflow:ellipsis}
@@ -222,7 +230,7 @@ svg{stroke-width:1.8}
 .schedule-error{font-size:13px;color:var(--text);padding:6px 8px;border-left:2px solid var(--text);background:var(--subtle);margin:0;line-height:1.6;overflow-wrap:anywhere}
 .schedule-save-actions{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}
 .schedule-save-actions button{font-size:13px;padding:5px 9px;white-space:nowrap;min-height:30px}
-@media(max-width:760px){.schedules-layout{grid-template-columns:212px minmax(0,1fr)}.schedule-editor,.schedule-toolbar{padding-inline:12px}.schedule-sidebar{padding:10px}}
+@media(max-width:760px){.schedules-layout{grid-template-columns:228px minmax(0,1fr)}.schedule-editor,.schedule-toolbar{padding-inline:12px}.schedule-sidebar{padding:9px}}
 @media(max-width:540px){.schedules-layout{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.schedule-sidebar{max-height:160px;border-right:0;border-bottom:1px solid var(--border)}}
 
 /* Formatted release notes retain the update dialog's font and scroll area. */
