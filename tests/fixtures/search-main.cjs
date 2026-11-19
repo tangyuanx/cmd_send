@@ -24,7 +24,14 @@ app.whenReady().then(async()=>{
  ipcMain.handle('fixture:schedule-group-action',(_event,id,action)=>schedules.groupAction(id,action));
  ipcMain.handle('fixture:schedule-draft-release',()=>{});
 
- ipcMain.handle('fixture:pick',()=>{global.searchCaptures.picks++;const target=fixture.target||{id:fixture.schedules?'target-'+global.searchCaptures.picks:'fixture-target',name:fixture.schedules?'测试目标 '+global.searchCaptures.picks:'测试目标',title:fixture.schedules?'Renderer fixture '+global.searchCaptures.picks:'Renderer fixture',detail:'仅记录发送请求',strategy:'测试'};targets.set(target.id,target);return fixture.pendingPick?new Promise(resolve=>pendingPick=resolve):target;});
+ ipcMain.handle('fixture:pick',async(_event,options)=>{
+   const index=++global.searchCaptures.picks;
+   const target=fixture.pendingPick?await new Promise(resolve=>pendingPick=resolve):fixture.target||{id:schedules?'target-'+index:'fixture-target',name:schedules?'测试目标 '+index:'测试目标',title:schedules?'Renderer fixture '+index:'Renderer fixture',detail:'仅记录发送请求',strategy:'测试'};
+   if(target.cancelled)return target;
+   targets.set(target.id,target);
+   if(options?.scope==='schedule'&&options.scheduleId!==undefined)return {target,...await schedules.bindTarget(options.scheduleId,target)};
+   return target;
+ });
  ipcMain.handle('fixture:cancel-pick',()=>{global.searchCaptures.cancels++;pendingPick?.({cancelled:true});pendingPick=null;});
  ipcMain.handle('fixture:save',(_event,id,text)=>{global.searchCaptures.saves.push({id,text});return {};});
  ipcMain.handle('fixture:start',(_event,options)=>{global.searchCaptures.plans.push(options);return {id:'search-run'};});

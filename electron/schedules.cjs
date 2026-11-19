@@ -4,6 +4,8 @@ const {randomUUID}=require('node:crypto');
 const fs=require('node:fs/promises');const path=require('node:path');
 const {SendQueue}=require('./queue.cjs');
 
+const labelForTarget=target=>[target.alias||target.sessionName||target.title||target.name,target.sessionAddress].filter(Boolean).join(' · ');
+
 function configuration(value){
   if(!value||typeof value!=='object')throw new Error('任务配置无效');
   const {commands,mode='countdown',periodMs=1000,at=null,commandInterval=500,characterInterval=2}=value;
@@ -101,13 +103,34 @@ class ScheduleManager extends EventEmitter {
       if(target&&!this.backend.hasTarget(target.id))throw new Error('目标已失效，请重新绑定');
       if(old)await this.halt(old);
       if(target)this.backend.retain(target.id);
-      const label=target?[target.alias||target.sessionName||target.title||target.name,target.sessionAddress].filter(Boolean).join(' · '):old?.targetLabel||'';
+      const label=target?labelForTarget(target):old?.targetLabel||'';
       const j=this.entry(id,config,target?{...target}:null,label),before=new Map(this.jobs);this.jobs.set(id,j);
       try{await this.persist();}catch(error){this.jobs=before;if(target)this.backend.release(target.id);this.publish();throw new Error('任务未保存：'+error.message);}
       if(old?.target)this.backend.release(old.target.id);
       if(value.start)this.arm(j);this.publish();return this.snapshot();
     });
   }
+  bindTarget(id,target){return this.change(async()=>{
+    const job=this.get(id);
+    if(!target||!this.backend.hasTarget(target.id))throw new Error('目标已失效，请重新绑定');
+    this.backend.deliveryInfo(target.id);
+    const paused=job.enabled;
+    if(paused)await this.halt(job);
+    const previousTarget=job.target,previousLabel=job.targetLabel;
+    this.backend.retain(target.id);
+    job.target={...target};
+    job.targetLabel=labelForTarget(target);
+    try{await this.persist();}
+    catch(error){
+      job.target=previousTarget;job.targetLabel=previousLabel;
+      this.backend.release(target.id);this.publish();
+      throw new Error('目标未保存：'+error.message);
+    }
+    if(previousTarget)this.backend.release(previousTarget.id);
+    job.status='paused';job.error='';
+    this.publish();
+    return {jobs:this.snapshot(),paused};
+  });}
   checkStart(j,now=this.clock()){
     if(this.closing)throw new Error('正在退出');
     if(!j.target||!this.backend.hasTarget(j.target.id))throw new Error('请先编辑任务并重新绑定目标');

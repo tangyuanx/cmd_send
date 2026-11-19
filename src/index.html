@@ -15,25 +15,23 @@
     <button id="pinButton" class="icon-button pin-button" title="窗口置顶" aria-label="窗口置顶" data-icon="pin"></button>
   </header>
   <div class="workspace">
-    <nav class="scene-sidebar" aria-label="场景目录"><div id="sceneList" class="scene-list"></div><p id="sceneEmpty" class="scene-empty" hidden>没有场景标题<br>单独一行填写<br>[场景名称]</p><div id="sceneHint" class="sidebar-note" hidden><span data-icon="list"></span><span>从文本标题生成</span></div></nav>
+    <nav class="scene-sidebar" aria-label="场景目录"><div id="sceneList" class="scene-list"></div><p id="sceneEmpty" class="scene-empty" hidden>暂无场景</p></nav>
     <section id="editorArea" class="editor-area" aria-label="命令编辑器">
       <div id="findBar" class="find-bar" hidden><span data-icon="search"></span><input id="findInput" aria-label="查找文本" placeholder="查找文本…"><span id="findCount" class="find-count" role="status" aria-live="polite" aria-atomic="true">0 / 0</span><button id="findPrevious" class="icon-button" aria-label="上一处匹配" title="上一处 · Shift+Enter" data-icon="up" disabled></button><button id="findNext" class="icon-button" aria-label="下一处匹配" title="下一处 · Enter" data-icon="down" disabled></button><button id="findClose" class="icon-button" aria-label="关闭查找" title="关闭 · Esc" data-icon="close"></button></div>
       <div id="editorScroller" class="editor-scroller"><div id="editorCanvas" class="editor-canvas"><div id="currentLine" class="current-line" aria-hidden="true"></div><div id="findLine" class="find-line" aria-hidden="true" hidden></div><pre id="syntaxText" class="syntax-text" aria-hidden="true"></pre><textarea id="editor" class="editor" spellcheck="false" autocapitalize="off" autocorrect="off" wrap="off" aria-label="TXT 命令文本"></textarea></div></div>
-      <div id="emptyState" class="empty-state" hidden><span data-icon="file"></span><h2>未打开文件</h2><p>在顶部文件菜单中打开 TXT 文件</p></div>
-      <div id="editorHint" class="editor-hint"><span data-icon="mouse"></span><span>光标所在行，或选中的文字</span><span class="hint-separator">·</span><span>自动忽略标题和注释</span></div>
+      <div id="emptyState" class="empty-state" hidden><span data-icon="file"></span><p>从顶部文件菜单打开 TXT</p></div>
     </section>
     <aside class="action-sidebar" aria-label="发送操作">
       <div class="send-controls">
-        <button id="sendButton" class="send-button" disabled title="发送 · Ctrl+Enter"><span data-icon="send"></span><span id="sendLabel">发送</span></button>
-        <button id="repeatButton" class="repeat-button secondary-button" disabled aria-describedby="repeatHint"><span data-icon="repeat"></span><span id="repeatLabel">重复发送</span></button>
-        <p id="repeatHint" class="repeat-hint"><span id="repeatInterval">间隔 500 ms</span><span id="repeatModeHint">持续循环，直到手动停止</span></p>
+        <button id="sendButton" class="send-button" disabled><span data-icon="send"></span><span id="sendLabel">发送</span></button>
+        <button id="repeatButton" class="repeat-button secondary-button" disabled><span data-icon="repeat"></span><span id="repeatLabel">重复发送</span></button>
         <div id="runControls" class="run-controls" hidden>
           <button id="pauseButton" class="secondary-button"><span data-icon="pause"></span><span id="pauseLabel">暂停</span></button>
-          <button id="stopButton" class="secondary-button" title="停止 · Esc"><span data-icon="stop"></span><span>停止</span></button>
+          <button id="stopButton" class="secondary-button"><span data-icon="stop"></span><span>停止</span></button>
         </div>
       </div>
       <button id="schedulesButton" class="secondary-button schedules-button"><span data-icon="repeat"></span><span>定时发送</span><span id="scheduleActiveCount" hidden></span></button>
-      <div class="rail-bottom"><div class="rail-shortcuts"><span>Ctrl + Enter<span>发送</span></span><span>Esc<span>停止</span></span></div><button id="settingsButton" class="rail-settings" title="发送设置"><span data-icon="sliders"></span><span>发送设置</span></button></div>
+      <button id="settingsButton" class="rail-settings" title="发送设置"><span data-icon="sliders"></span><span>发送设置</span></button>
     </aside>
   </div>
   <footer class="statusbar"><div class="status-group"><div class="status-message"><span id="statusIndicator" class="status-indicator"></span><span id="statusText" role="status" aria-live="polite">待选择目标</span></div><div class="editor-metadata"><span id="positionText">行 3，列 1</span><span id="selectionText" hidden></span><span class="meta-divider"></span><span id="encodingText">UTF-8</span><span id="newlineText">LF</span></div></div></footer>

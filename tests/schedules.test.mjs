@@ -88,6 +88,28 @@ test('failed persistence rolls back an edit safely; close still stops all tasks'
  const f=fixture(),m=f.manager;const a=await f.save('A');const before=m.snapshot();m.persist=()=>Promise.reject(Error('disk full'));
  await assert.rejects(m.save({id:a,commands:['changed']},{id:'B',name:'B'}),/未保存/);assert.deepEqual(m.get(a).config.commands,before[0].commands);assert.equal(m.get(a).enabled,false);assert.equal(f.refs.get('A'),1);assert.equal(f.refs.get('B'),0);await m.stopAll();assert.equal(f.broker.held.size,0);
 });
+test('rebinding commits only the destination, stops active delivery, and rolls back a failed write',async()=>{
+ const f=fixture(),m=f.manager;
+ try{
+  const [group]=await m.saveGroup({name:'联测'}),id=await f.save('ABCDE','A',{periodMs:50,characterInterval:40,groupId:group.id});
+  const config=m.get(id).config;
+  await until(()=>f.writes.length>0);
+  const result=await m.bindTarget(id,{id:'B',name:'B'});
+  assert.equal(result.paused,true);
+  assert.equal(result.jobs[0].status,'paused');
+  assert.equal(m.get(id).config,config);
+  assert.equal(m.get(id).target.id,'B');assert.equal(m.get(id).nextAt,null);
+  assert.equal(f.refs.get('A'),0);assert.equal(f.refs.get('B'),1);
+  const writes=f.writes.length;
+  await delay(60);
+  assert.equal(f.writes.length,writes);assert.ok(f.writes.every(([target])=>target==='A'));
+  const before=m.snapshot();
+  m.persist=async()=>{throw Error('disk full');};
+  await assert.rejects(m.bindTarget(id,{id:'C',name:'C'}),/目标未保存/);
+  assert.deepEqual(m.snapshot(),before);
+  assert.equal(f.refs.get('B'),1);assert.equal(f.refs.get('C'),0);
+ }finally{await m.stopAll();}
+});
 
 test('reordering and cross-group moves survive restart without persisting targets or armed state',async()=>{
  const f=fixture(),dir=await fs.mkdtemp(path.join(os.tmpdir(),'cmd-order-')),file=path.join(dir,'schedules.json'),m=new ScheduleManager({backend:f.backend,broker:f.broker,file});

@@ -24,9 +24,9 @@ try{
  await page.locator('.scene-button').nth(2).click();assert.equal(await cursor(),text.indexOf('【空场景】'),'empty scene cannot jump into the next scene');
  await page.locator('.scene-button').nth(4).click();assert.equal(await cursor(),text.indexOf('echo last'));
  assert.equal(await page.locator('.scene-button[aria-current="location"]').count(),1);passed('all bracket formats render, highlight, navigate and distinguish repeated headings');
- await page.locator('#fileButton').click();await page.locator('[data-file="plain"]').click();assert.equal(await page.locator('.scene-button').count(),0);assert.equal(await page.locator('#sceneEmpty').isVisible(),true);
+ await page.locator('#fileButton').click();await page.locator('[data-file="plain"]').click();assert.equal(await page.locator('.scene-button').count(),0);assert.equal(await page.locator('#sceneEmpty').isVisible(),true);assert.equal(await page.locator('#sceneEmpty').textContent(),'暂无场景');
  await page.locator('#editor').fill('【新场景】\necho new');assert.equal(await page.locator('.scene-name').textContent(),'[新场景]');assert.equal(await page.locator('#sceneEmpty').isHidden(),true);
- await page.locator('#fileButton').click();await page.locator('[data-file="scenes"]').click();assert.equal(await page.locator('.scene-button').count(),5);passed('no-heading files show the required format; edits and file switches rebuild the directory');
+ await page.locator('#fileButton').click();await page.locator('[data-file="scenes"]').click();assert.equal(await page.locator('.scene-button').count(),5);passed('no-heading files show the empty directory state; edits and file switches rebuild the directory');
  await dragTarget(page);await page.waitForFunction(()=>document.getElementById('targetLabel').textContent==='192.168.1.10:22');
  assert.equal(await page.locator('#targetSession').textContent(),'MobaXterm · 会话一 · UART 调试 · PID 123 · 输入区 456');
  assert.match(await page.locator('#targetButton').getAttribute('aria-label'),/192\.168\.1\.10:22.*会话一.*输入区 456/);

@@ -204,7 +204,15 @@ export function initSchedules({desktop,initial,initialGroups=[],icon,getSource,g
   }
   async function pick(){
     if(picking||busy||!canPick())return;picking=true;error();renderTarget();render();
-    try{const result=await desktop.pickTarget({scope:'schedule'});if(!result?.cancelled)target=result;}catch(e){error(e.message);}finally{picking=false;renderTarget();render();}
+    const scheduleId=id||undefined;
+    try{
+      const result=await desktop.pickTarget({scope:'schedule',scheduleId});
+      if(result?.cancelled)return;
+      if(scheduleId){
+        jobs=result.jobs;target=result.target;
+        toast(result.paused?'目标已更新，任务已暂停':'目标已更新');
+      }else target=result;
+    }catch(e){error(e.message);}finally{picking=false;renderTarget();render();}
   }
   function cancelPick(){if(!picking)return;void desktop.cancelPick().catch(e=>error(e.message));}
   const drag=bindTargetDrag($('scheduleTarget'),{canStart:()=>!busy&&!picking&&canPick(),onDrag:pick,onCancel:cancelPick,onClick:()=>error('按住目标按钮，拖到目标输入区后释放。')});

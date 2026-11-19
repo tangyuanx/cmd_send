@@ -59,8 +59,29 @@ try{
  assert.ok(await page.locator('#scheduleStart').evaluate(el=>{const dialog=el.closest('dialog');return dialog.scrollWidth<=dialog.clientWidth+2;}));
  await page.locator('#scheduleStart').scrollIntoViewIfNeeded();assert.ok(await page.locator('#scheduleStart').evaluate(el=>{const a=el.getBoundingClientRect(),b=el.closest('dialog').getBoundingClientRect();return a.top>=b.top&&a.bottom<=b.bottom;}),'save action remains reachable in a minimum-size window');
  await app.close();app=null;await launch();await page.locator('#schedulesButton').click();const restored=await jobs();assert.equal(restored.length,2);assert.ok(restored.every(j=>!j.target&&!j.enabled&&j.status==='unbound'));assert.equal(await page.locator('.schedule-job [role=switch]:disabled').count(),2);
- await row('目标 A').getByRole('button',{name:/^编辑 /}).click();await dragTarget(page,'#scheduleTarget');await page.waitForFunction(()=>document.getElementById('scheduleTargetLabel').textContent==='测试目标 1');
+ const destination=name=>row(name).locator('.schedule-job-target').textContent();
+ const status=name=>row(name).locator('.schedule-job-state').textContent();
+ const rebindCommands=page.locator('#scheduleCommands');
+ async function editTask(name){
+   await row(name).getByRole('button',{name:/^编辑 /}).click();
+   await row(name).locator('[aria-current="true"]').waitFor();
+ }
+ await editTask('目标 A');
+ await page.locator('#scheduleName').fill('未保存的名称');await rebindCommands.fill('draft');await page.locator('#schedulePeriod').fill('42');
+ await dragTarget(page,'#scheduleTarget');await page.waitForFunction(()=>document.getElementById('scheduleTargetLabel').textContent==='测试目标 1');
+ assert.equal(await destination('目标 A'),'测试目标 1');
+ assert.equal(await status('目标 A'),'已暂停');
+ assert.equal(await status('目标 B'),'待绑定');
+ await row('目标 A').locator('button[role="switch"]:enabled').waitFor();
+ assert.equal(await page.locator('#scheduleName').inputValue(),'未保存的名称');assert.equal(await rebindCommands.inputValue(),'draft');
+ const updated=(await jobs()).find(j=>j.name==='目标 A'),previous=restored.find(j=>j.name==='目标 A');
+ assert.equal(updated.target.id,'target-1');assert.deepEqual(updated.commands,previous.commands);assert.equal(updated.periodMs,previous.periodMs);
+ const savedProfile=JSON.parse(await fs.readFile(path.join(temp,'profile','schedules.json'),'utf8'));
+ assert.equal(savedProfile.jobs.find(j=>j.id===updated.id).targetLabel,updated.targetLabel);
+ await editTask('目标 B');
+ await editTask('目标 A');assert.equal(await page.locator('#scheduleTargetLabel').textContent(),'测试目标 1');
+ assert.equal(await page.locator('#scheduleName').inputValue(),'目标 A');assert.equal(await rebindCommands.inputValue(),'A');
  await page.locator('#scheduleMode').selectOption('once');await setAt(2500);await page.locator('#scheduleStart').click();await waitJob('目标 A',j=>j.status==='completed');assert.equal((await jobs()).find(j=>j.name==='目标 A').count,1);
  await row('目标 B').getByRole('button',{name:/^编辑 /}).click();await page.locator('#scheduleDelete').click();await page.waitForFunction(()=>document.querySelectorAll('.schedule-job').length===1);await page.screenshot({animations:'disabled',path:path.join(evidence,'one-shot-complete.png')});
- assert.deepEqual(errors,[]);console.log('PASS: countdown and absolute one-shot delivery, independent targets, live remaining time, presets, direct seconds, pause, persistence and minimum window');
+ assert.deepEqual(errors,[]);console.log('PASS: countdown and absolute one-shot delivery, independent targets, live remaining time, presets, direct seconds, pause, target-only autosave and persistence, minimum window');
 }catch(error){console.error('RENDERER ERRORS',errors);if(app)console.error('CAPTURES',await app.evaluate(()=>global.searchCaptures));await page?.screenshot({path:path.join(evidence,'failure.png')}).catch(()=>{});throw error;}finally{await app?.close();await fs.rm(temp,{recursive:true,force:true});}

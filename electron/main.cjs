@@ -81,7 +81,10 @@ app.whenReady().then(async()=>{
     return backend.permission();
   });
   handle('desktop:pick',(options={})=>{
-    const scope=options?.scope==='schedule'?'schedule':'manual';if(closing)throw new Error('正在退出');
+    const scope=options?.scope==='schedule'?'schedule':'manual';
+    const scheduleId=scope==='schedule'?options.scheduleId:undefined;
+    if(closing)throw new Error('正在退出');
+    if(scheduleId!==undefined)schedules.get(scheduleId);
     unlocked();if(!backend.permission())throw new Error('请先在系统设置 → 隐私与安全性 → 辅助功能中允许「命令定向」，再重新拖选目标。');
     cancelPick();return new Promise((resolve,reject)=>{
       const started=Date.now(),epoch=pickEpoch;picker={resolve,reject,timer:setInterval(()=>{
@@ -89,7 +92,19 @@ app.whenReady().then(async()=>{
         try{
           if(backend.escapeDown()||Date.now()-started>60000){cancelPick();return;}
           if(backend.mouseDown())return;
-          clearInterval(current.timer);picker=null;current.resolve((async()=>{const target=await backend.pick();if(epoch!==pickEpoch){backend.retain(target.id);backend.release(target.id);return {cancelled:true};}backend.retain(target.id);if(scope==='schedule'){releaseDraft();draftTarget=target;}else{if(manualTarget)backend.release(manualTarget.id);manualTarget=target;}return target;})());
+          clearInterval(current.timer);picker=null;
+          current.resolve((async()=>{
+            const target=await backend.pick();
+            backend.retain(target.id);
+            if(epoch!==pickEpoch){backend.release(target.id);return {cancelled:true};}
+            if(scheduleId!==undefined){
+              try{return {target,...await schedules.bindTarget(scheduleId,target)};}
+              finally{backend.release(target.id);}
+            }
+            if(scope==='schedule'){releaseDraft();draftTarget=target;}
+            else{if(manualTarget)backend.release(manualTarget.id);manualTarget=target;}
+            return target;
+          })());
         }catch(error){clearInterval(current.timer);if(picker===current)picker=null;current.reject(error);}
       },30)};
     });
