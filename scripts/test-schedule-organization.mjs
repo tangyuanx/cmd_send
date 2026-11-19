@@ -10,6 +10,7 @@ const env={...process.env,CMD_SEND_SEARCH_FIXTURE:JSON.stringify({profile:path.j
 let app,page;const errors=[];
 async function launch(){app=await electron.launch({args:[...(process.platform==='linux'?['--no-sandbox','--ozone-platform=headless']:[]),path.join(root,'tests','fixtures','search-main.cjs')],env,timeout:60000});page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));await page.evaluate(()=>{globalThis.scheduleDragEvents=[];for(const type of ['dragstart','dragover','drop','dragend'])document.addEventListener(type,event=>{const node=event.target;globalThis.scheduleDragEvents.push({type,job:node.closest?.('[data-job]')?.dataset.job,group:node.closest?.('[data-group]')?.dataset.group,x:event.clientX,y:event.clientY});},true);});await page.locator('#schedulesButton').click();}
 const row=name=>page.locator('.schedule-job').filter({has:page.locator('strong',{hasText:new RegExp('^'+name+'$')})});
+const groupMore=name=>page.getByRole('button',{name:`${name}：更多操作`,exact:true});
 const order=()=>page.locator('.schedule-job strong').allTextContents();
 const state=()=>app.evaluate(()=>({jobs:global.scheduleManager.snapshot(),groups:global.scheduleManager.groupSnapshot(),writes:global.searchCaptures.deliveries}));
 async function settled(){await page.waitForFunction(()=>!document.getElementById('scheduleNew').disabled);}
@@ -42,12 +43,17 @@ try{
  await createGroup('设备组');const group=(await state()).groups[0],section=page.locator(`[data-group="${group.id}"]`);
  await dragTaskTo(row('A').locator('[data-drag-handle]'),section.locator('.schedule-group-empty'));await page.waitForFunction(groupId=>[...document.querySelectorAll('.schedule-job')].find(node=>node.querySelector('strong').textContent==='A')?.closest('[data-group]')?.dataset.group===groupId,group.id);await settled();assert.equal((await state()).jobs.find(j=>j.name==='A').groupId,group.id);
  await row('B').getByRole('button',{name:'编辑',exact:true}).click();await page.locator('#scheduleGroup').selectOption(group.id);await page.locator('#scheduleSave').click();await settled();assert.equal(await section.locator('.schedule-job').count(),2);
- await page.getByRole('button',{name:'编辑分组 设备组',exact:true}).click();await page.locator('#scheduleGroupName').fill('设备联测');await page.getByRole('button',{name:'保存组名',exact:true}).click();await page.locator('#scheduleGroupForm').waitFor({state:'hidden'});
+ await groupMore('设备组').click();await page.getByRole('button',{name:'编辑分组 设备组',exact:true}).click();await page.locator('#scheduleGroupName').fill('设备联测');await page.getByRole('button',{name:'保存组名',exact:true}).click();await page.locator('#scheduleGroupForm').waitFor({state:'hidden'});
  assert.equal(await page.locator('#scheduleGroup option:checked').textContent(),'设备联测');
- await page.getByRole('button',{name:'设备联测：开启全部',exact:true}).click();await settled();let data=await state();const members=data.jobs.filter(j=>j.groupId===group.id);assert.ok(members.every(j=>j.enabled));assert.equal(members[0].nextAt,members[1].nextAt);
+ const fold=section.locator('.schedule-group-fold'),groupStart=section.locator('.schedule-group-heading').getByRole('button',{name:'设备联测：开启全部',exact:true});
+ await fold.click();assert.equal(await fold.getAttribute('aria-expanded'),'false');assert.equal(await row('A').isVisible(),false);assert.equal(await groupStart.isVisible(),true);
+ await fold.click();assert.equal(await fold.getAttribute('aria-expanded'),'true');assert.equal(await row('A').isVisible(),true);
+ await groupStart.click();await settled();let data=await state();const members=data.jobs.filter(j=>j.groupId===group.id);assert.ok(members.every(j=>j.enabled));assert.equal(members[0].nextAt,members[1].nextAt);
  const deadline=members.find(j=>j.name==='A').nextAt;
  await row('B').getByRole('switch').click();await settled();await page.getByRole('button',{name:'设备联测：开启全部',exact:true}).click();await settled();assert.equal((await state()).jobs.find(j=>j.name==='A').nextAt,deadline);
  await page.getByRole('button',{name:'设备联测：暂停全部',exact:true}).click();await settled();assert.ok((await state()).jobs.every(j=>!j.enabled));
+ await groupStart.click();await settled();await row('B').getByRole('switch').click();await settled();
+ await groupMore('设备联测').click();await section.locator('.schedule-group-menu').getByRole('button',{name:'暂停全部',exact:true}).click();await settled();assert.ok((await state()).jobs.every(j=>!j.enabled));
  for(const name of ['A','B']){await row(name).getByRole('button',{name:'编辑',exact:true}).click();await page.locator('#scheduleUnit').selectOption('1000');await page.locator('#schedulePeriod').fill('1');await page.locator('#scheduleSave').click();await settled();}
  console.log('PASS: group creation, cross-group drag, rename, shared deadline, mixed start and pause');
  await page.getByRole('button',{name:'设备联测：开启全部',exact:true}).click();await settled();
@@ -61,7 +67,7 @@ try{
  assert.ok(await page.locator('#schedulesDialog').evaluate(el=>el.scrollWidth<=el.clientWidth+2));assert.ok(await page.locator('#scheduleSave').evaluate(el=>{const a=el.getBoundingClientRect(),b=el.closest('dialog').getBoundingClientRect();return a.top>=b.top&&a.bottom<=b.bottom;}));
  const savedOrder=await order();await app.close();app=null;await launch();assert.deepEqual(await order(),savedOrder);assert.deepEqual((await state()).groups,[{id:group.id,name:'设备联测'}]);assert.ok((await state()).jobs.every(j=>!j.target&&!j.enabled));
  await page.getByRole('button',{name:'设备联测：开启全部',exact:true}).click();await settled();assert.match(await page.locator('#scheduleError').textContent(),/重新绑定/);assert.ok((await state()).jobs.every(j=>!j.enabled));
- await page.getByRole('button',{name:'编辑分组 设备联测',exact:true}).click();await page.locator('#scheduleGroupDelete').click();await settled();assert.equal((await state()).groups.length,0);assert.equal((await state()).jobs.length,3);assert.ok((await state()).jobs.every(j=>j.groupId===null));
+ await groupMore('设备联测').click();await page.getByRole('button',{name:'编辑分组 设备联测',exact:true}).click();await page.locator('#scheduleGroupDelete').click();await settled();assert.equal((await state()).groups.length,0);assert.equal((await state()).jobs.length,3);assert.ok((await state()).jobs.every(j=>j.groupId===null));
  assert.deepEqual(errors,[]);console.log('PASS: drag, keyboard, cancellation, cross-group move, group editing, shared start, pause, one-shot delivery, persistence, invalid group start, deletion and minimum window');
  await app.close();app=null;
  // Exercise the production main process, sender validation and preload too.

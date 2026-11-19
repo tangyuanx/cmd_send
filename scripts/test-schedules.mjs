@@ -19,12 +19,12 @@ try{
  await page.locator('#editor').evaluate(el=>{el.setSelectionRange(0,el.value.length);el.dispatchEvent(new Event('select'));});
  await page.locator('#schedulesButton').click();assert.equal(await page.locator('#scheduleCommands').inputValue(),'echo A\necho B');assert.equal(await page.locator('#scheduleTargetLabel').textContent(),'测试目标 1');
  assert.deepEqual(await page.locator('#scheduleMode option').evaluateAll(nodes=>nodes.map(n=>n.value)),['countdown','once']);
- await page.getByRole('button',{name:'1 分钟',exact:true}).click();assert.equal(await page.locator('#schedulePeriod').inputValue(),'1');assert.equal(await page.locator('#scheduleUnit').inputValue(),'60000');
+ await page.locator('#schedulePresets').selectOption({label:'1 分钟'});assert.equal(await page.locator('#schedulePeriod').inputValue(),'1');assert.equal(await page.locator('#scheduleUnit').inputValue(),'60000');
  await page.locator('#scheduleMode').selectOption('once');assert.equal(await page.locator('#schedulePeriod').isDisabled(),true);assert.equal(await page.locator('#scheduleSecond').isEnabled(),true);
- await page.getByRole('button',{name:'5 分钟后',exact:true}).click();const planned=await page.locator('#scheduleMinute').inputValue();assert.ok(planned.length>0);
+ await page.locator('#schedulePresets').selectOption({label:'5 分钟后'});const planned=await page.locator('#scheduleMinute').inputValue();assert.ok(planned.length>0);
  await setAt(-5000);await page.locator('#scheduleStart').click();assert.match(await page.locator('#scheduleError').textContent(),/晚于/);assert.equal((await jobs()).length,0);
  await page.locator('#scheduleMode').selectOption('countdown');assert.equal(await page.locator('#scheduleSecond').isDisabled(),true);
- await page.locator('#scheduleName').fill('目标 A');await page.locator('#scheduleCommands').fill('A');await page.getByRole('button',{name:'5 秒',exact:true}).click();await page.locator('#schedulePeriod').fill('1');await page.locator('#scheduleStart').click();
+ await page.locator('#scheduleName').fill('目标 A');await page.locator('#scheduleCommands').fill('A');await page.locator('#schedulePresets').selectOption({label:'5 秒'});await page.locator('#schedulePeriod').fill('1');await page.locator('#scheduleStart').click();
  await page.locator('#scheduleNew').click();await dragTarget(page,'#scheduleTarget');await page.waitForFunction(()=>document.getElementById('scheduleTargetLabel').textContent==='测试目标 2');
  await page.locator('#scheduleName').fill('目标 B');await page.locator('#scheduleCommands').fill('B');await page.locator('#schedulePeriod').fill('5');await page.locator('#scheduleStart').click();
  await page.waitForFunction(()=>document.querySelector('[data-next-at]')?.textContent.includes('后发送'));
@@ -42,7 +42,8 @@ try{
  const deliveries=await app.evaluate(()=>global.searchCaptures.deliveries);assert.deepEqual(deliveries,[['target-1','A'],['target-1','\n'],['target-2','B'],['target-2','\n']]);
  assert.equal(await page.locator('#targetLabel').textContent(),'测试目标 1');
  // A long countdown provides stable visual evidence and an active status.
- await row('目标 B').getByRole('button',{name:'编辑',exact:true}).click();await page.getByRole('button',{name:'5 分钟',exact:true}).click();await page.locator('#scheduleStart').click();
+ await row('目标 B').getByRole('button',{name:'编辑',exact:true}).click();await page.locator('#schedulePresets').selectOption({label:'5 分钟'});await page.locator('#scheduleStart').click();
+ assert.ok(await page.locator('#scheduleCommands').evaluate(el=>el.offsetHeight>el.closest('form').querySelector('.schedule-toolbar').offsetHeight),'commands occupy the main editing area');
  await page.screenshot({animations:'disabled',path:path.join(evidence,'countdown-light.png')});await page.evaluate(()=>document.documentElement.dataset.theme='dark');await page.screenshot({animations:'disabled',path:path.join(evidence,'countdown-dark.png')});
  await page.evaluate(()=>document.documentElement.dataset.theme='light');await page.locator('#scheduleMode').selectOption('once');await page.locator('#scheduleHour').fill('23');await page.locator('#scheduleMinute').fill('45');await page.locator('#scheduleSecond').fill('30');assert.equal(await page.locator('#scheduleSecond').inputValue(),'30');
  await page.screenshot({animations:'disabled',path:path.join(evidence,'specified-time.png')});

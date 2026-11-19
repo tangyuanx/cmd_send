@@ -48,25 +48,34 @@
         <div class="schedule-group-actions"><button type="submit" class="secondary-button">保存组名</button><button id="scheduleGroupCancel" type="button">取消</button><button id="scheduleGroupDelete" type="button" hidden>删除组</button></div>
         <p id="scheduleGroupError" class="schedule-error" role="alert" hidden></p>
       </form>
-      <p id="scheduleOrderHint" class="schedule-order-hint">拖动手柄排序 · Alt + ↑ / ↓</p><p id="scheduleEmpty">还没有定时任务</p><div id="scheduleList" class="schedule-list"></div>
+      <p id="scheduleEmpty">还没有定时任务</p><div id="scheduleList" class="schedule-list"></div>
       <p id="scheduleOrderStatus" class="visually-hidden" role="status" aria-live="polite"></p>
     </section>
     <form id="scheduleForm" class="schedule-form">
-      <div class="schedule-identity">
-        <div class="schedule-field"><label for="scheduleTarget">发送目标</label><button type="button" id="scheduleTarget" class="secondary-button schedule-target" title="按住后拖到目标输入区释放"><span data-icon="crosshair"></span><span id="scheduleTargetLabel">选择目标</span></button></div>
-        <div class="schedule-field"><label for="scheduleName">任务名称</label><input id="scheduleName" maxlength="80" required></div>
+      <div class="schedule-editor">
+        <input id="scheduleName" aria-label="任务名称" placeholder="任务名称" maxlength="80" required>
+        <textarea id="scheduleCommands" aria-label="待发送指令" rows="5" spellcheck="false" placeholder="输入待发送指令" required></textarea>
       </div>
-      <div class="schedule-field"><label for="scheduleGroup">所属分组</label><select id="scheduleGroup"><option value="">未分组</option></select></div>
-      <textarea id="scheduleCommands" aria-label="待发送指令" rows="5" spellcheck="false" placeholder="待发送指令" required></textarea>
-      <div class="schedule-timing">
-        <div class="schedule-field schedule-mode"><label for="scheduleMode">定时方式</label><select id="scheduleMode"><option value="countdown">倒计时</option><option value="once">指定时间</option></select></div>
-        <div id="schedulePeriodRow" class="schedule-field"><label for="schedulePeriod">等待时长</label><div class="schedule-period"><input id="schedulePeriod" type="number" min="1" max="86400" step="1" value="5"><select id="scheduleUnit" aria-label="倒计时单位"><option value="1000">秒</option><option value="60000">分钟</option><option value="3600000">小时</option></select></div></div>
-        <div id="scheduleAtRow" class="schedule-field" hidden><label for="scheduleDate">发送时间</label><div class="schedule-at"><input id="scheduleDate" type="date" aria-label="发送日期"><input id="scheduleHour" type="number" min="0" max="23" step="1" aria-label="时"><span>:</span><input id="scheduleMinute" type="number" min="0" max="59" step="1" aria-label="分"><span>:</span><input id="scheduleSecond" type="number" min="0" max="59" step="1" aria-label="秒"></div></div>
+      <div class="schedule-toolbar">
+        <div class="schedule-config" role="group" aria-label="发送配置">
+          <button type="button" id="scheduleTarget" class="secondary-button schedule-target" title="按住后拖到目标输入区释放"><span data-icon="crosshair"></span><span id="scheduleTargetLabel">选择目标</span></button>
+          <select id="scheduleGroup" aria-label="所属分组"><option value="">未分组</option></select>
+          <select id="scheduleMode" aria-label="定时方式"><option value="countdown">倒计时</option><option value="once">指定时间</option></select>
+          <div id="schedulePeriodRow" class="schedule-period"><input id="schedulePeriod" aria-label="等待时长" type="number" min="1" max="86400" step="1" value="5"><select id="scheduleUnit" aria-label="倒计时单位"><option value="1000">秒</option><option value="60000">分钟</option><option value="3600000">小时</option></select></div>
+          <div id="scheduleAtRow" class="schedule-at" hidden><input id="scheduleDate" type="date" aria-label="发送日期"><input id="scheduleHour" type="number" min="0" max="23" step="1" aria-label="时"><span>:</span><input id="scheduleMinute" type="number" min="0" max="59" step="1" aria-label="分"><span>:</span><input id="scheduleSecond" type="number" min="0" max="59" step="1" aria-label="秒"></div>
+          <select id="schedulePresets" aria-label="快捷时间"></select>
+        </div>
+        <p id="scheduleError" class="schedule-error" role="alert" hidden></p>
+        <div class="schedule-toolbar-actions">
+          <details id="scheduleOptions" class="schedule-options">
+            <summary>投递设置</summary>
+            <div class="schedule-field-row"><label for="scheduleEnter">每条指令后回车</label><input id="scheduleEnter" class="switch" type="checkbox" checked></div>
+            <div class="schedule-field-row"><label for="scheduleCommandInterval">命令间隔 · ms</label><input id="scheduleCommandInterval" type="number" min="50" max="600000" value="500" required></div>
+            <div class="schedule-field-row"><label for="scheduleCharacterInterval">字符间隔 · ms</label><input id="scheduleCharacterInterval" type="number" min="0" max="1000" value="2" required></div>
+          </details>
+          <div class="schedule-save-actions"><button id="scheduleSave" class="secondary-button" type="submit">保存为暂停</button><button id="scheduleStart" class="primary-button" type="submit">保存并启动</button></div>
+        </div>
       </div>
-      <div id="schedulePresets" class="schedule-presets" role="group" aria-label="快捷时间"></div>
-      <details class="schedule-options"><summary>投递设置</summary><div class="schedule-field-row"><label for="scheduleEnter">每条指令后回车</label><input id="scheduleEnter" class="switch" type="checkbox" checked></div><div class="schedule-field-row"><label for="scheduleCommandInterval">命令间隔 · ms</label><input id="scheduleCommandInterval" type="number" min="50" max="600000" value="500" required></div><div class="schedule-field-row"><label for="scheduleCharacterInterval">字符间隔 · ms</label><input id="scheduleCharacterInterval" type="number" min="0" max="1000" value="2" required></div></details>
-      <p id="scheduleError" class="schedule-error" role="alert" hidden></p><div class="schedule-save-actions"><button id="scheduleSave" class="secondary-button" type="submit">保存为暂停</button><button id="scheduleStart" class="primary-button" type="submit">保存并启动</button></div>
-      
     </form>
   </div>
 

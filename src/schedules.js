@@ -6,10 +6,15 @@ const time=value=>value?new Date(value).toLocaleString():'';
 const label=t=>t?[t.alias||t.sessionName||t.title||t.name,t.sessionAddress,t.sessionPort?`端口 ${t.sessionPort}`:''].filter(Boolean).join(' · '):'选择目标';
 const shortLabel=t=>t?.alias||t?.sessionAddress||t?.sessionName||t?.name||t?.title||'待绑定';
 const pad=value=>String(value).padStart(2,'0');
+const presets={
+  countdown:[['5 秒',5000,1000],['30 秒',30000,1000],['1 分钟',60000,60000],['5 分钟',300000,60000],['30 分钟',1800000,60000]],
+  once:[['1 分钟后',60000],['5 分钟后',300000],['30 分钟后',1800000],['1 小时后',3600000]]
+};
 function remaining(at){const seconds=Math.max(0,Math.ceil((at-Date.now())/1000));return `${pad(Math.floor(seconds/3600))}:${pad(Math.floor(seconds/60)%60)}:${pad(seconds%60)} 后发送`;}
 export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSource,getSettings,canPick,toast}){
   let jobs=initial,groups=initialGroups,id=null,target=null,picking=false,busy=false,ticker=null,groupEditId=null,dragId=null,dragSource=null,dropPosition=null;
   const dialog=$('schedulesDialog');
+  const collapsedGroups=new Set();
   function error(message=''){$('scheduleError').textContent=message;$('scheduleError').hidden=!message;}
   function renderTarget(){$('scheduleTargetLabel').textContent=picking?'拖到目标后释放':target?shortLabel(target):'选择目标';$('scheduleTarget').title=picking?'Esc 取消':label(target);}
   function setDate(date){
@@ -28,13 +33,20 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
     $('schedulePeriodRow').hidden=once;$('scheduleAtRow').hidden=!once;
     for(const name of ['scheduleDate','scheduleHour','scheduleMinute','scheduleSecond']){$(name).required=once;$(name).disabled=!once;}
     $('schedulePeriod').required=!once;$('schedulePeriod').disabled=once;$('scheduleUnit').disabled=once;
-    $('schedulePresets').replaceChildren();
-    for(const [text,amount,unit] of once?[['1 分钟后',1,60000],['5 分钟后',5,60000],['30 分钟后',30,60000],['1 小时后',1,3600000]]:[['5 秒',5,1000],['30 秒',30,1000],['1 分钟',1,60000],['5 分钟',5,60000],['30 分钟',30,60000]]){
-      const button=document.createElement('button');button.type='button';button.textContent=text;
-      button.addEventListener('click',()=>{if(once)setDate(new Date(Date.now()+amount*unit));else{$('schedulePeriod').value=String(amount);$('scheduleUnit').value=String(unit);durationLimit();}error();});$('schedulePresets').append(button);
-    }
+    $('schedulePresets').replaceChildren(new Option('快捷时间',''),...presets[$('scheduleMode').value].map(([text,ms])=>new Option(text,String(ms))));
     durationLimit();
   }
+  $('schedulePresets').addEventListener('change',event=>{
+    const select=event.currentTarget,mode=$('scheduleMode').value;
+    const preset=presets[mode].find(([,ms])=>ms===Number(select.value));
+    if(!preset)return;
+    const [,ms,unit]=preset;
+    if(mode==='once')setDate(new Date(Date.now()+ms));
+    else{
+      $('schedulePeriod').value=String(ms/unit);$('scheduleUnit').value=String(unit);durationLimit();
+    }
+    select.value='';error();
+  });
   function durationLimit(){const unit=Number($('scheduleUnit').value);$('schedulePeriod').max=String(86400000/unit);$('schedulePeriod').min=String(1000/unit);$('schedulePeriod').step='any';}
   function updateRemaining(){
     for(const node of $('scheduleList').querySelectorAll('[data-next-at]'))node.textContent=remaining(Number(node.dataset.nextAt));
@@ -55,7 +67,12 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
   function endDrag(){dragId=null;dragSource=null;clearDrop();render();}
   async function moveTask(job,position,keyboard=false){
     if(busy||picking)return;busy=true;render();error();
-    try{jobs=await desktop.moveSchedule(job.id,position);$('scheduleOrderStatus').textContent=`已移动「${job.name}」并保存顺序`;}
+    try{
+      jobs=await desktop.moveSchedule(job.id,position);
+      collapsedGroups.delete(position.groupId);
+      if(id===job.id)$('scheduleGroup').value=position.groupId||'';
+      $('scheduleOrderStatus').textContent=`已移动「${job.name}」并保存顺序`;
+    }
     catch(e){error(e.message);toast(e.message);}finally{busy=false;render();if(keyboard)[...$('scheduleList').querySelectorAll('[data-drag-handle]')].find(n=>n.dataset.dragHandle===job.id)?.focus();}
   }
   function renderJob(j,parent){
@@ -73,38 +90,74 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
       if(up?index>0:index<members.length-1)void moveTask(j,{groupId:j.groupId||null,beforeId:up?members[index-1].id:members[index+2]?.id||null},true);
     });
     const title=document.createElement('strong');title.textContent=j.name;title.title=j.name;
-    const toggle=document.createElement('button');toggle.type='button';toggle.className='schedule-toggle';toggle.dataset.focusKey='toggle:'+j.id;toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(j.enabled));toggle.setAttribute('aria-label',`${j.name}：${j.enabled?'暂停':'启动'}`);toggle.title=j.enabled?'暂停':'启动';toggle.disabled=busy||picking||(!j.enabled&&!j.target);toggle.addEventListener('click',()=>operate(j,j.enabled?'pause':'start'));heading.append(handle,title,toggle);
+    const editButton=document.createElement('button');editButton.type='button';editButton.className='schedule-job-name';editButton.title=j.name;
+    editButton.append(title);editButton.setAttribute('aria-label','编辑');editButton.dataset.focusKey='edit:'+j.id;
+    editButton.disabled=busy||picking;editButton.addEventListener('click',()=>operate(j,'edit'));
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='schedule-toggle';toggle.dataset.focusKey='toggle:'+j.id;toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(j.enabled));toggle.setAttribute('aria-label',`${j.name}：${j.enabled?'暂停':'启动'}`);toggle.title=j.enabled?'暂停':'启动';toggle.disabled=busy||picking||(!j.enabled&&!j.target);toggle.addEventListener('click',()=>operate(j,j.enabled?'pause':'start'));heading.append(handle,editButton,toggle);
     const state=document.createElement('div');state.className='schedule-job-state';state.dataset.status=j.status;
     const status=document.createElement('span');status.textContent=statuses[j.status]||j.status;
     const next=document.createElement('span');next.className='schedule-next';if(j.enabled&&j.nextAt)next.dataset.nextAt=String(j.nextAt);next.textContent=j.enabled&&j.nextAt?remaining(j.nextAt):'';next.title=j.nextAt?time(j.nextAt):j.lastAt?`上次 ${time(j.lastAt)}`:'';state.append(status,next);
     const footer=document.createElement('div');footer.className='schedule-job-footer';
     const info=document.createElement('span');info.className='schedule-job-target';info.textContent=j.target?shortLabel(j.target):j.targetLabel||'待绑定';info.title=j.target?label(j.target):j.targetLabel;footer.append(info);
-    for(const [action,text] of [['edit','编辑'],['delete','删除']]){const button=document.createElement('button');button.type='button';button.textContent=text;button.dataset.action=action;button.dataset.focusKey=action+':'+j.id;button.disabled=busy||picking;button.addEventListener('click',()=>operate(j,action));footer.append(button);}
-    row.append(heading,state,footer);
+    const remove=document.createElement('button');remove.type='button';remove.textContent='删除';remove.dataset.focusKey='delete:'+j.id;
+    remove.disabled=busy||picking;remove.addEventListener('click',()=>operate(j,'delete'));footer.append(state,remove);
+    row.append(heading,footer);
     if(j.error){const failure=document.createElement('p');failure.className='schedule-error';failure.textContent=j.error;row.append(failure);}parent.append(row);
+  }
+  function renderGroupHeading(group,members,rows){
+    const heading=document.createElement('div');heading.className='schedule-group-heading';
+    const fold=document.createElement('button');fold.type='button';fold.className='schedule-group-fold';fold.dataset.focusKey='fold:'+group.id;
+    fold.setAttribute('aria-expanded',String(!rows.hidden));fold.setAttribute('aria-controls',rows.id);
+    fold.addEventListener('click',()=>{
+      if(collapsedGroups.has(group.id))collapsedGroups.delete(group.id);else collapsedGroups.add(group.id);
+      rows.hidden=collapsedGroups.has(group.id);
+      fold.setAttribute('aria-expanded',String(!rows.hidden));
+    });
+    const name=document.createElement('span');name.className='schedule-group-name';name.textContent=group.name;name.title=group.name;
+    const count=document.createElement('span');count.className='schedule-group-count';count.textContent=String(members.length);
+    fold.append(name,count);heading.append(fold);
+    if(!group.id)return heading;
+
+    const active=members.filter(j=>j.enabled).length;
+    const allActive=members.length>0&&active===members.length;
+    const action=document.createElement('button');action.type='button';action.className='schedule-group-toggle';
+    action.dataset.active=String(allActive);action.dataset.focusKey='group-toggle:'+group.id;
+    action.textContent=allActive?'暂停全部':'开启全部';
+    action.setAttribute('aria-label',`${group.name}：${action.textContent}`);
+    action.disabled=busy||picking||!members.length;
+    action.addEventListener('click',()=>groupAction(group,allActive?'pause':'start'));
+
+    const more=document.createElement('button');more.type='button';more.className='schedule-group-more';more.textContent='⋯';
+    more.setAttribute('aria-label',`${group.name}：更多操作`);more.title='更多操作';more.disabled=busy||picking;more.dataset.focusKey='group-more:'+group.id;
+    const menu=document.createElement('div');menu.className='schedule-group-menu';menu.popover='auto';more.popoverTargetElement=menu;
+    const rename=document.createElement('button');rename.type='button';rename.textContent='编辑分组';
+    rename.setAttribute('aria-label',`编辑分组 ${group.name}`);
+    rename.addEventListener('click',()=>{menu.hidePopover();editGroup(group);});
+    menu.append(rename);
+    if(active&&!allActive){
+      const pause=document.createElement('button');pause.type='button';pause.textContent='暂停全部';
+      pause.addEventListener('click',()=>groupAction(group,'pause'));
+      menu.append(pause);
+    }
+    heading.append(action,more,menu);
+    return heading;
   }
   function render(){
     // Keep native drag sources alive while scheduler state events arrive.
     if(dragId)return;
-    const list=$('scheduleList'),focusKey=list.contains(document.activeElement)?document.activeElement.dataset.focusKey:null;list.replaceChildren();$('scheduleEmpty').hidden=jobs.length>0||groups.length>0;$('scheduleOrderHint').hidden=!jobs.length;
+    const list=$('scheduleList'),focusKey=list.contains(document.activeElement)?document.activeElement.dataset.focusKey:null;list.replaceChildren();$('scheduleEmpty').hidden=jobs.length>0||groups.length>0;
     $('scheduleNew').disabled=busy||picking;$('scheduleGroupNew').disabled=busy||picking;for(const node of $('scheduleGroupForm').elements)node.disabled=busy||picking;
     const count=jobs.filter(j=>j.enabled).length;$('scheduleActiveCount').textContent=String(count);$('scheduleActiveCount').hidden=!count;
     for(const group of [{id:null,name:'未分组'},...groups]){
       const members=jobs.filter(j=>(j.groupId||null)===group.id);if(!group.id&&!groups.length&&!members.length)continue;
       const section=document.createElement('section');section.className='schedule-group';section.dataset.group=group.id||'';section.setAttribute('aria-label',group.name);
+      const rows=document.createElement('div');rows.id='schedule-rows-'+(group.id||'ungrouped');
       if(group.id||groups.length){
-        const heading=document.createElement('div');heading.className='schedule-group-heading';
-        const name=document.createElement(group.id?'button':'span');name.className='schedule-group-name';name.textContent=group.name;name.title=group.id?'编辑组名或删除分组':group.name;
-        if(group.id){name.type='button';name.disabled=busy||picking;name.dataset.focusKey='group:'+group.id;name.setAttribute('aria-label',`编辑分组 ${group.name}`);name.addEventListener('click',()=>editGroup(group));}
-        const active=members.filter(j=>j.enabled).length,count=document.createElement('span');count.className='schedule-group-count';count.textContent=`${active}/${members.length} 开启`;heading.append(name,count);section.append(heading);
-        if(group.id){const actions=document.createElement('div');actions.className='schedule-group-actions';
-          for(const [action,text,disabled] of [['start','开启全部',!members.length||active===members.length],['pause','暂停全部',!active]]){
-            const button=document.createElement('button');button.type='button';button.textContent=text;button.disabled=busy||picking||disabled;button.dataset.focusKey='group-'+action+':'+group.id;button.setAttribute('aria-label',`${group.name}：${text}`);button.addEventListener('click',()=>groupAction(group,action));actions.append(button);
-          }section.append(actions);
-        }
+        rows.hidden=collapsedGroups.has(group.id);section.append(renderGroupHeading(group,members,rows));
       }
-      for(const j of members)renderJob(j,section);
-      if(!members.length){const empty=document.createElement('p');empty.className='schedule-group-empty';empty.textContent='拖入任务，或在右侧选择此组';section.append(empty);}list.append(section);
+      for(const j of members)renderJob(j,rows);
+      if(!members.length){const empty=document.createElement('p');empty.className='schedule-group-empty';empty.textContent='暂无任务';rows.append(empty);}
+      section.append(rows);list.append(section);
     }
     if(focusKey)[...list.querySelectorAll('[data-focus-key]')].find(node=>node.dataset.focusKey===focusKey)?.focus({preventScroll:true});
   }
@@ -118,7 +171,8 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
     $('scheduleMode').value=job?.mode==='once'?'once':'countdown';const period=job?.periodMs||5000,unit=period%3600000===0?3600000:period%60000===0?60000:1000;
     $('scheduleUnit').value=String(unit);$('schedulePeriod').value=String(period/unit);setDate(new Date(job?.at||Date.now()+60000));
     $('scheduleEnter').checked=job?.enter??s.enter;$('scheduleCommandInterval').value=job?.commandInterval??s.interval;$('scheduleCharacterInterval').value=job?.characterInterval??s.characterInterval;
-    error();mode();renderTarget();render();
+    $('scheduleOptions').open=false;
+    $('scheduleForm').scrollTop=0;error();mode();renderTarget();render();
   }
   async function operate(job,action){
     if(busy||picking)return;if(action==='edit'){await edit(job);return;}
@@ -163,7 +217,7 @@ export function initSchedules({desktop,initial,initialGroups=[],getTarget,getSou
     if(start&&!target){error('请先绑定发送目标');return;}
     const value={...(id?{id}:{}),name:$('scheduleName').value,commands,targetId:target?.id,targetAlias:target?.alias,groupId:$('scheduleGroup').value||null,mode:once?'once':'countdown',periodMs:once?5000:periodMs,at,enter:$('scheduleEnter').checked,commandInterval:Number($('scheduleCommandInterval').value),characterInterval:Number($('scheduleCharacterInterval').value),start};
     busy=true;$('scheduleSave').disabled=true;$('scheduleStart').disabled=true;render();
-    try{const previous=new Set(jobs.map(j=>j.id));jobs=await desktop.saveSchedule(value);id=id||jobs.find(j=>!previous.has(j.id))?.id;toast(start?'定时任务已启动':'已保存');}
+    try{const previous=new Set(jobs.map(j=>j.id));jobs=await desktop.saveSchedule(value);id=id||jobs.find(j=>!previous.has(j.id))?.id;collapsedGroups.delete(value.groupId);toast(start?'定时任务已启动':'已保存');}
     catch(e){error(e.message);}finally{busy=false;$('scheduleSave').disabled=false;$('scheduleStart').disabled=false;render();}
   });
   desktop.onSchedules?.(value=>{jobs=value;render();});desktop.onScheduleGroups?.(value=>{if(JSON.stringify(value)===JSON.stringify(groups))return;groups=value;groupOptions();render();});groupOptions();render();
